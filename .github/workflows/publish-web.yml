@@ -1,0 +1,96 @@
+name: Publish web app
+
+# Publishes the Kotlin/Wasm browser build (`shared/build/dist/wasmJs/productionExecutable`).
+#
+# A GitHub Release cannot *host* a web app: release assets are served as
+# `application/octet-stream` with `Content-Disposition: attachment`, so a browser downloads
+# index.html instead of rendering it. This workflow therefore produces both things from one
+# tag push:
+#   * `deploy-pages` serves the folder at https://<owner>.github.io/SharedRecipes/
+#   * `build` attaches a zip of the same folder to the Release, next to the generated notes
+#
+# Prerequisites (one-time, manual):
+#   * Settings → Pages → Source = "GitHub Actions" (a private repo needs a paid plan)
+#   * Authentication → URL Configuration in Supabase: add the Pages origin, otherwise
+#     sign-up confirmation e-mails redirect nowhere (see README, "Publish the web build")
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: publish-web
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # create the GitHub Release
+    steps:
+      - uses: actions/checkout@v4
+
+      # JDK 21: supported by Gradle 9.8.2, Kotlin 2.4.21 and AGP 9.5.1 alike.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The same task the README documents: it shares App() with the native targets and
+      # writes plain static files (index.html, composeApp.js, the .wasm modules).
+      - run: ./gradlew :shared:wasmJsBrowserDistribution
+
+      # Runs for tags and for workflow_dispatch alike, so the Pages artifact and the release
+      # zip are byte-identical. Source maps are a dev aid only; this keeps ~1.5 MB out.
+      - name: Prune dev-only files
+        run: rm -f shared/build/dist/wasmJs/productionExecutable/composeApp.js.map
+
+      - name: Package release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          cd shared/build/dist/wasmJs/productionExecutable
+          # "." keeps index.html at the archive root, so unzipping and serving the folder
+          # works without a nested directory.
+          zip -r "$GITHUB_WORKSPACE/shared-recipes-web-${GITHUB_REF_NAME}.zip" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: shared/build/dist/wasmJs/productionExecutable
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "shared-recipes-web-${GITHUB_REF_NAME}.zip" \
+            --title "Shared Recipes web ${GITHUB_REF_NAME}" \
+            --generate-notes
+
+  deploy-pages:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write         # publish the site
+      id-token: write      # OIDC token actions/deploy-pages exchanges for a deployment
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: dist
+
+      # Artifact deployments are served verbatim (no Jekyll pass), so `.nojekyll` and a
+      # 404.html fallback are both unnecessary: the app has no URL-level routing.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

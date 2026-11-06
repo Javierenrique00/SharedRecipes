@@ -124,6 +124,56 @@ serves CORS headers). Only e-mail flows depend on the origin: if sign-up confirm
 enabled, add `http://localhost:8080` (plus your production origin) to
 **Authentication → URL Configuration** in the dashboard.
 
+### Publish the web build
+
+`.github/workflows/publish-web.yml` turns a tag into both a live site and a downloadable
+bundle. Push a version tag from the commit you want to ship:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The workflow runs `:shared:wasmJsBrowserDistribution` once and then:
+
+| Job | Result |
+|---|---|
+| `deploy-pages` | the folder is served at `https://<owner>.github.io/SharedRecipes/` |
+| `build` | `shared-recipes-web-v1.0.0.zip` is attached to the Release, with generated notes |
+
+(`workflow_dispatch` re-runs the build and the Pages deploy without creating a release.)
+
+Two things to know before the first run:
+
+- **A Release cannot host the app.** Release assets are served as
+  `application/octet-stream` with `Content-Disposition: attachment`, so a browser downloads
+  `index.html` instead of rendering it — that is why the zip is the artefact and Pages is the
+  live URL. Unzipped, the folder is still a plain static site (see the `python3 -m http.server`
+  note above), and `index.html` sits at the zip root.
+- **Pages must be enabled once**, under **Settings → Pages → Source: GitHub Actions**. This
+  repository is public, and GitHub Pages is free for public repositories (only *private* ones
+  need a paid plan), so the site lands at `https://javierenrique00.github.io/SharedRecipes/`.
+  Then add that origin to **Authentication → URL Configuration** in Supabase, exactly like
+  `localhost:8080`, or sign-up confirmation links will not come back to the app.
+
+<details>
+<summary>Publishing by hand instead (no CI)</summary>
+
+```bash
+./gradlew :shared:wasmJsBrowserDistribution
+cd shared/build/dist/wasmJs/productionExecutable && zip -r /tmp/shared-recipes-web-v1.0.0.zip .
+gh release create v1.0.0 /tmp/shared-recipes-web-v1.0.0.zip --generate-notes
+```
+
+</details>
+
+The generated site is ~15 MB, almost all of it the two `.wasm` modules, and it needs no
+custom headers: the bundle uses no `SharedArrayBuffer`, so COOP/COEP are not required. It
+does need `application/wasm` for the modules (Skiko instantiates them with
+`WebAssembly.instantiateStreaming`, which has no MIME fallback) — GitHub Pages serves that
+type correctly, and the paths inside the bundle are relative, so the `/SharedRecipes/`
+sub-path works without any base-path setting.
+
 ### Run the web build from Android Studio
 
 Android Studio has no Kotlin/Wasm debugger, so the browser target gets a **Gradle** run
