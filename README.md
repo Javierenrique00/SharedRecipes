@@ -27,6 +27,8 @@ shared/                       Kotlin Multiplatform module — UI + data layer
   src/androidMain/            Android Activity bridge
   src/iosMain/                UIViewController bridge
   src/jvmMain/                Desktop entry point (main.kt)
+  src/wasmJsMain/             Browser entry point (main.kt), localStorage session store and
+                              the index.html host page
 androidApp/                   Android application module (AGP 9 requires the split)
 gradle/libs.versions.toml     Single source of truth for dependency versions
 ```
@@ -43,7 +45,7 @@ gradle/libs.versions.toml     Single source of truth for dependency versions
 | Gradle | 9.8.2 | |
 | Android | minSdk 26, compileSdk 37 | supabase-kt requires minSdk 26 |
 
-Two structural consequences worth knowing before you change the build:
+A few structural consequences worth knowing before you change the build:
 
 1. **AGP 9 removed support for `com.android.application` + `org.jetbrains.kotlin.multiplatform`
    in the same module.** That is why `shared` (KMP library, `androidLibrary {}`) and
@@ -52,6 +54,9 @@ Two structural consequences worth knowing before you change the build:
    `com.android.application`.
 3. **`iosX64` is not a target.** Compose Multiplatform 1.12.x publishes no iosX64
    artifacts. Use `iosSimulatorArm64` for the simulator.
+4. **The browser target is `wasmJs`, not `js(IR)`.** Compose Multiplatform only reaches the
+   web through Kotlin/Wasm, and every dependency above publishes a `wasm-js` artifact at the
+   pinned versions, so the web build shares the same `App()` composable as the native apps.
 
 ## Configure
 
@@ -103,7 +108,21 @@ Two structural consequences worth knowing before you change the build:
 ./gradlew :shared:run                 # Desktop (fastest feedback)
 ./gradlew :androidApp:assembleDebug   # Android APK
 ./gradlew :shared:compileKotlinIosSimulatorArm64   # iOS framework
+./gradlew :shared:wasmJsBrowserDevelopmentRun      # Browser at http://localhost:8080
+./gradlew :shared:wasmJsBrowserDistribution        # Static site in shared/build/dist/wasmJs/productionExecutable
 ```
+
+The web build is the same `App()` rendered with Skiko on a `<canvas>`; `index.html` lives in
+`shared/src/wasmJsMain/resources` and loads `composeApp.js`. `wasmJsBrowserDevelopmentRun`
+starts webpack-dev-server with hot reload, so opening <http://localhost:8080> is the fastest
+way to see the app in a browser. The distribution folder is plain static files — serve it
+over HTTP (`python3 -m http.server 8080 --directory shared/build/dist/wasmJs/productionExecutable`),
+never through `file://`, because the wasm modules must be delivered as `application/wasm`.
+
+Calls to Supabase are ordinary HTTPS requests and work from the browser as-is (the project
+serves CORS headers). Only e-mail flows depend on the origin: if sign-up confirmation is
+enabled, add `http://localhost:8080` (plus your production origin) to
+**Authentication → URL Configuration** in the dashboard.
 
 ## Sessions and local storage
 
@@ -118,11 +137,12 @@ surface for no benefit.
 | Android | `secure_session` SharedPreferences file, AES-256-GCM under a non-exportable Android Keystore key | ✅ |
 | iOS | Keychain, `kSecClassGenericPassword`, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (no iCloud sync) | ✅ |
 | Desktop (dev harness) | `java.util.prefs` node `com/co/recipes/session` | ❌ the JDK has no keychain API |
+| Web (browser) | `localStorage`, key `sb-<project-ref>-session` | ❌ browsers expose no keychain API (see the web note below) |
 
 Implementation lives in `shared/src/commonMain/.../infraestructure/security`
 (`SecureSessionManager` + a 3-method `SecureStore`), with one small actual per target:
-`AndroidSecureStore` (Keystore), `KeychainSecureStore` (Security framework) and
-`DesktopSecureStore`. Remembered, non-secret values (`auth.remember_me`,
+`AndroidSecureStore` (Keystore), `KeychainSecureStore` (Security framework),
+`DesktopSecureStore` and `WebSecureStore`. Remembered, non-secret values (`auth.remember_me`,
 `auth.last_email`, `auth.last_display_name`) are plain preferences via
 `UserPreferences` — deliberately a separate store from the tokens.
 
@@ -134,6 +154,12 @@ Android note: `startSharedRecipes()` calls `SecureStoreInitializer.init(applicat
 before the Compose tree starts; calling `App()` without it fails fast with a clear
 message rather than silently losing the session.
 
+Web note: browsers give scripts no keychain and `SecureStore` is synchronous, so the web
+build keeps the session in plaintext `localStorage` — the same trade-off as Desktop, but
+with a real XSS surface because any script on the app's origin can read it. Nothing else is
+persisted (still no password), `localStorage` is per-origin, and every access is guarded so
+private-mode or quota failures fall back to "sign in again" instead of crashing.
+
 ## Security model
 
 - Admin is granted by the `public.admin_emails` allowlist, read by the sign-up trigger;
@@ -142,6 +168,9 @@ message rather than silently losing the session.
   `profiles.role` (column-level grant on `display_name` only).
 - No credential is persisted: the encrypted session (see above) is what keeps a user
   signed in, and the password only lives in memory while it is typed.
+- The browser build is the one exception to "encrypted at rest": `localStorage` has no
+  keychain to hide behind (see *Sessions and local storage*). RLS still enforces every
+  rule server-side, so a stolen session cannot do more than that user could.
 - `public.is_admin()` is a `SECURITY DEFINER` helper with an empty `search_path`, used by
   policies so that rules on `profiles` can be evaluated without recursing.
 - Clients cannot change their own `role`: `update` on `profiles` is granted **per column**

@@ -30,6 +30,25 @@ kotlin {
 
     jvm()
 
+    // Browser target (Kotlin/Wasm + Skiko). `binaries.executable()` is what generates a
+    // JS entry point for `main()` and the `wasmJsBrowserDevelopmentRun` /
+    // `wasmJsBrowserDistribution` tasks; the bundle is called composeApp.js because
+    // src/wasmJsMain/resources/index.html loads it by that name.
+    wasmJs {
+        outputModuleName = "composeApp"
+        browser {
+            commonWebpackConfig {
+                outputFileName = "composeApp.js"
+            }
+            // Running commonTest in a browser would require karma + headless Chrome on
+            // every `check`; the web build is verified through the dev server instead.
+            testTask {
+                enabled = false
+            }
+        }
+        binaries.executable()
+    }
+
     sourceSets {
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
@@ -75,6 +94,13 @@ kotlin {
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
+            implementation(libs.coil.ktor)
+        }
+        wasmJsMain.dependencies {
+            // Ktor's fetch-based engine: supabase-kt and Coil both create an HttpClient.
+            implementation(libs.ktor.client.js)
+            // window/document/localStorage for the entry point and WebSecureStore.
+            implementation(libs.kotlinx.browser)
             implementation(libs.coil.ktor)
         }
     }
