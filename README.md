@@ -124,6 +124,26 @@ serves CORS headers). Only e-mail flows depend on the origin: if sign-up confirm
 enabled, add `http://localhost:8080` (plus your production origin) to
 **Authentication → URL Configuration** in the dashboard.
 
+### Browser navigation (web only)
+
+The UI is drawn on a canvas, so screens are not paths in the URL. On the browser target the
+controller is bound to window history (`bindToBrowserNavigation()` in `wasmJsMain/main.kt`),
+which changes that:
+
+- the current screen is appended as a `#fragment`, e.g.
+  `…/SharedRecipes/#com.co.recipes.ui.navigation.RecipeDetail/<id>`;
+- Back/Forward walk the same screens as the in-app back button;
+- pasting such a URL reopens that screen — after signing in, because the navigation graph only
+  exists for an authenticated session (`App.kt` gates it), so a link can never skip the login;
+- only the fragment changes, so the path stays `/SharedRecipes/` and a refresh always gets
+  `index.html` — no rewrite or 404 rules are needed on the host.
+
+The fragment uses the type-safe route name. `bindToBrowserNavigation(getBackStackEntryRoute)`
+can shorten those (e.g. `#recipe/<id>`), but then hand-typed URLs have to be parsed and routed
+by the app itself. Binding is guarded with a flag so it runs once per page load: the API
+installs a `popstate` listener and offers no way to remove it, so a second bind (sign out, sign
+in again) would handle every Back/Forward twice.
+
 ### Publish the web build
 
 `.github/workflows/publish-web.yml` turns a tag into both a live site and a downloadable

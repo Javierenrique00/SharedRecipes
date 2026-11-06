@@ -16,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
 import com.co.recipes.domain.viewmodel.AuthViewModel
 import com.co.recipes.infraestructure.SupabaseConfig
 import com.co.recipes.infraestructure.api.AuthApiImpl
@@ -26,7 +28,13 @@ import com.co.recipes.ui.navigation.RecipesNavigation
 import com.co.recipes.ui.screen.LoginScreen
 
 @Composable
-fun App() {
+fun App(
+    /**
+     * Web-only hook, invoked once the signed-in navigation graph is attached, so the browser
+     * target can bind it to window history. Android, iOS and desktop use the no-op default.
+     */
+    onNavHostReady: suspend (NavHostController) -> Unit = {},
+) {
     // The Supabase client owns the auth session, so it must survive recomposition.
     val supabase = remember { createSupabaseClientOrNull() }
     // Non-secret "remember my email" preferences; the session itself is encrypted
@@ -43,11 +51,19 @@ fun App() {
 
             val session = authViewModel.session
             when {
-                session != null -> RecipesNavigation(
-                    recipesApi = recipesApi,
-                    session = session,
-                    onSignOut = authViewModel::signOut,
-                )
+                session != null -> {
+                    // Created inside the signed-in branch on purpose: signing out disposes the
+                    // controller, so the next session starts from RecipeList with a clean stack
+                    // instead of restoring the previous user's screens.
+                    val navController = rememberNavController()
+                    RecipesNavigation(
+                        navController = navController,
+                        recipesApi = recipesApi,
+                        session = session,
+                        onSignOut = authViewModel::signOut,
+                        onNavHostReady = onNavHostReady,
+                    )
+                }
 
                 // Reading the encrypted session is async: wait instead of flashing the
                 // login form for a user who is already signed in.
