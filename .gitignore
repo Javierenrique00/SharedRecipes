@@ -11,3 +11,10 @@ local.properties
 shared/build
 androidApp/build
 iosApp/build
+
+# Kotlin compiler cache: transformed klib metadata, ~4.5 MB and 260 files that Gradle
+# regenerates on its own. Committing it made the repo noisy for no benefit.
+.kotlin/
+
+# Xcode per-user state (open tabs, window positions, scheme management).
+xcuserdata/
