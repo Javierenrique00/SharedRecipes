@@ -146,22 +146,24 @@ in again) would handle every Back/Forward twice.
 
 ### Publish the web build
 
-`.github/workflows/publish-web.yml` turns a tag into both a live site and a downloadable
-bundle. Push a version tag from the commit you want to ship:
+`.github/workflows/publish-web.yml` publishes the same build two ways:
+
+| Trigger | Result |
+|---|---|
+| push to `main` (or a manual run on `main`) | `deploy-pages` serves the folder at `https://javierenrique00.github.io/SharedRecipes/` |
+| push of a `v*` tag | `build` attaches `shared-recipes-web-<tag>.zip` to the Release, with generated notes |
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git push origin main              # ship the current code to the live site
+git tag v1.0.0 && git push origin v1.0.0   # cut a downloadable Release
 ```
 
-The workflow runs `:shared:wasmJsBrowserDistribution` once and then:
-
-| Job | Result |
-|---|---|
-| `deploy-pages` | the folder is served at `https://<owner>.github.io/SharedRecipes/` |
-| `build` | `shared-recipes-web-v1.0.0.zip` is attached to the Release, with generated notes |
-
-(`workflow_dispatch` re-runs the build and the Pages deploy without creating a release.)
+The split exists because the auto-created `github-pages` environment restricts deployments to
+the `main` **branch**: a run triggered by a tag is rejected before its first step, with no
+logs to show for it. Tagging therefore only cuts the Release, while the site follows `main`.
+If you would rather deploy from tags, add a tag rule under **Settings → Environments →
+github-pages → Deployment branches and tags**, then drop the `if: github.ref_type == 'branch'`
+on the `deploy-pages` job.
 
 Two things to know before the first run:
 

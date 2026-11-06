@@ -16,6 +16,11 @@ name: Publish web app
 
 on:
   push:
+    # A push to main deploys the site; a v* tag cuts a Release. Both are needed because the
+    # auto-created `github-pages` environment only allows deployments from the `main` branch
+    # (Environment → github-pages → deployment branch policy), so a tag-triggered deploy is
+    # rejected before it starts. Add a tag rule there if you would rather deploy from tags.
+    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 
@@ -73,6 +78,9 @@ jobs:
 
   deploy-pages:
     needs: build
+    # Tags still cut a Release, but only a branch ref may deploy to the `github-pages`
+    # environment (see the branch policy note under `on:`).
+    if: github.ref_type == 'branch'
     runs-on: ubuntu-latest
     permissions:
       pages: write         # publish the site
