@@ -1,4 +1,5 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -39,6 +40,15 @@ kotlin {
         browser {
             commonWebpackConfig {
                 outputFileName = "composeApp.js"
+                // The IDE run configuration (".idea/runConfigurations", documented in the
+                // README) is a plain Gradle task, so make the task itself open the app:
+                // webpack-dev-server launches the system browser instead of only printing
+                // a URL. The port is pinned so the Supabase redirect allowlist
+                // (http://localhost:8080) keeps working run after run.
+                devServer = (devServer ?: KotlinWebpackConfig.DevServer()).apply {
+                    open = true
+                    port = 8080
+                }
             }
             // Running commonTest in a browser would require karma + headless Chrome on
             // every `check`; the web build is verified through the dev server instead.

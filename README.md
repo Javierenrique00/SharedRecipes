@@ -114,8 +114,8 @@ A few structural consequences worth knowing before you change the build:
 
 The web build is the same `App()` rendered with Skiko on a `<canvas>`; `index.html` lives in
 `shared/src/wasmJsMain/resources` and loads `composeApp.js`. `wasmJsBrowserDevelopmentRun`
-starts webpack-dev-server with hot reload, so opening <http://localhost:8080> is the fastest
-way to see the app in a browser. The distribution folder is plain static files — serve it
+starts webpack-dev-server and opens <http://localhost:8080> in your default browser, which is
+the fastest way to see the app. The distribution folder is plain static files — serve it
 over HTTP (`python3 -m http.server 8080 --directory shared/build/dist/wasmJs/productionExecutable`),
 never through `file://`, because the wasm modules must be delivered as `application/wasm`.
 
@@ -123,6 +123,33 @@ Calls to Supabase are ordinary HTTPS requests and work from the browser as-is (t
 serves CORS headers). Only e-mail flows depend on the origin: if sign-up confirmation is
 enabled, add `http://localhost:8080` (plus your production origin) to
 **Authentication → URL Configuration** in the dashboard.
+
+### Run the web build from Android Studio
+
+Android Studio has no Kotlin/Wasm debugger, so the browser target gets a **Gradle** run
+configuration instead of a native one. The project ships it as
+`.idea/runConfigurations/shared__wasmJs__web.xml`, so it appears in the dropdown next to the
+Android and iOS configurations:
+
+1. Pick **shared [wasmJs] web** in the run-configuration dropdown and press **Run** (green
+   arrow). webpack-dev-server compiles the bundle, serves it on <http://localhost:8080> and
+   opens that page in the default browser (`devServer.open` in `shared/build.gradle.kts`).
+2. Stop it with the red button in the *Run* tool window. Only one process can hold port
+   8080, so a second run fails while the first is still alive.
+
+If the configuration is missing (e.g. `.idea` was deleted), recreate it with
+**Run → Edit Configurations → + → Gradle**: *Gradle project* `shared`, *Tasks*
+`wasmJsBrowserDevelopmentRun`. Double-clicking that task in the *Gradle* tool window does
+the same without a run configuration.
+
+Two limits worth knowing:
+
+- **Debug** does not apply to this target: the IDE debugger attaches to a JVM, not to a
+  `.wasm` module. Use Chrome DevTools → *Sources* instead — the dev server emits source
+  maps, so Kotlin frames are steppable there.
+- The Kotlin code is compiled by the Gradle task, so a source change needs the
+  configuration re-run (the page reloads from the new bundle). For a compile-on-save loop,
+  keep `./gradlew :shared:wasmJsBrowserDevelopmentRun --continuous` running in a terminal.
 
 ## Sessions and local storage
 
