@@ -4,10 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shared Recipes</title>
+    <!--
+        `color-scheme` lets the browser paint scrollbars and form chrome for the active theme
+        instead of inverting our canvas; the theme-color pair tints mobile browser UI. Both are
+        the MaterialTheme backgrounds: #FEF7FF (lightColorScheme) / #141218 (darkColorScheme).
+    -->
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#FEF7FF" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#141218" media="(prefers-color-scheme: dark)">
     <style>
         /* ComposeViewport sizes its canvas from this container, so it needs a real height. */
         html, body { height: 100%; margin: 0; }
         #composeTarget { width: 100%; height: 100%; }
+        /*
+            Match the Compose background while the (~15 MB) wasm bundle boots, otherwise the page
+            flashes white before the first frame. The Kotlin side switches on its own through
+            `prefers-color-scheme`; this only covers the pre-paint window.
+        */
+        html, body { background: #FEF7FF; }
+        @media (prefers-color-scheme: dark) {
+            html, body { background: #141218; }
+        }
     </style>
     <script type="application/javascript" src="composeApp.js"></script>
 </head>

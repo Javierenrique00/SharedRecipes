@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Platform theme. Compose paints the whole UI, so this only styles what Compose does not own:
+      the window background behind the very first frame, and the status-bar icon tone (the app is
+      edge-to-edge from targetSdk 35 on, where `windowLightStatusBar` decides dark vs light icons).
+
+      The light/dark selection is done by the resource qualifier, not by code: `values-night`
+      holds the dark twin of this file, so a system theme change is picked up by the same
+      `uiMode` configuration change that `isSystemInDarkTheme()` reads in shared code.
+    -->
+    <style name="Theme.SharedRecipes" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

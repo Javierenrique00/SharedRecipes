@@ -7,7 +7,7 @@
         android:allowBackup="true"
         android:label="Shared Recipes"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@style/Theme.SharedRecipes">
 
         <activity
             android:name="com.co.recipes.MainActivity"

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Material3 baseline light `background` (ColorLightTokens.Background = Neutral98).
+      Mirrors the surface SharedRecipesTheme paints, so the window looks identical before the
+      first Compose frame. Keep in sync with shared/.../ui/theme/Theme.kt.
+    -->
+    <color name="window_background">#FFFEF7FF</color>
+</resources>

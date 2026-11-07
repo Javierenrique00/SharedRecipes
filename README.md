@@ -223,6 +223,44 @@ Two limits worth knowing:
   configuration re-run (the page reloads from the new bundle). For a compile-on-save loop,
   keep `./gradlew :shared:wasmJsBrowserDevelopmentRun --continuous` running in a terminal.
 
+## Light / dark theme
+
+The UI follows the operating system's appearance on **all four targets**; there is no in-app
+switch and nothing to configure. `App()` wraps the whole tree in `SharedRecipesTheme`
+(`shared/src/commonMain/.../ui/theme/Theme.kt`), which picks `lightColorScheme()` or
+`darkColorScheme()` from `isSystemInDarkTheme()`. No screen hardcodes a color — every
+`Scaffold`, `Card`, `OutlinedTextField` and `MaterialTheme.colorScheme.*` read is role-based —
+so adding the two schemes is what makes the entire UI dark-mode aware.
+
+`isSystemInDarkTheme()` is common-code API in Compose Multiplatform 1.12.2, implemented per
+platform, and it tracks the setting **while the app is running**:
+
+| Target | Source of truth | Live switch |
+|---|---|---|
+| Android | `Configuration.uiMode` | ✅ — `MainActivity` lists `uiMode` in `configChanges`, so the Activity is not recreated |
+| iOS | `UITraitCollection.userInterfaceStyle` — Compose's `ComposeContainer` re-provides it on every trait change | ✅ |
+| Desktop (JVM) | skiko's system theme, polled once per second | ✅ macOS/Windows. Upstream disables the polling on **Linux**, where the app stays light unless `ComposeUiFlags.pollSystemTheme = true` is set in `jvmMain/main.kt` |
+| Web (`wasmJs`) | `window.matchMedia("(prefers-color-scheme: dark)")` plus a `change` listener | ✅ |
+
+Only the *pre-paint* window is styled outside Compose, so booting never flashes the wrong
+color. These two pairs must stay equal to the Material3 baseline `background` role:
+
+| Target | Light | Dark | Where |
+|---|---|---|---|
+| Android | `#FEF7FF` | `#141218` | `androidApp/src/main/res/values{,-night}/colors.xml`, referenced as `window_background` by `values{,-night}/themes.xml` (`Theme.SharedRecipes`, also flips `windowLightStatusBar` so the edge-to-edge status-bar icons stay readable) |
+| Web | `#FEF7FF` | `#141218` | `shared/src/wasmJsMain/resources/index.html` (`color-scheme`, `theme-color`, `@media (prefers-color-scheme: dark)`) |
+
+iOS needs nothing: `Info.plist` has no `UIUserInterfaceStyle`, so the app follows the system and
+`ComposeContainer` handles trait changes on its own. Desktop window decorations are drawn by the
+OS and already match.
+
+Two notes for whoever changes the palette later:
+
+- If `SharedRecipesTheme` ever moves off the Material3 baseline colors, update the `#FEF7FF` /
+  `#141218` values above too — they are the only duplicated colors in the project.
+- `SharedRecipesTheme(darkTheme = true)` is the escape hatch for a preview or a test that needs a
+  fixed appearance; production code always uses the default (system) detection.
+
 ## Sessions and local storage
 
 Signing in persists an encrypted session, so the app re-opens on the recipe list

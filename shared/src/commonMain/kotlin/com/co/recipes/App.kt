@@ -26,6 +26,7 @@ import com.co.recipes.infraestructure.createSupabaseClientOrNull
 import com.co.recipes.infraestructure.preferences.UserPreferences
 import com.co.recipes.ui.navigation.RecipesNavigation
 import com.co.recipes.ui.screen.LoginScreen
+import com.co.recipes.ui.theme.SharedRecipesTheme
 
 @Composable
 fun App(
@@ -41,7 +42,8 @@ fun App(
     // and owned by Supabase's session manager.
     val preferences = remember { UserPreferences() }
 
-    MaterialTheme {
+    // Light or dark comes from the OS on every target (see SharedRecipesTheme).
+    SharedRecipesTheme {
         if (supabase == null) {
             ConfigurationMissingScreen(SupabaseConfig.configurationError)
         } else {
