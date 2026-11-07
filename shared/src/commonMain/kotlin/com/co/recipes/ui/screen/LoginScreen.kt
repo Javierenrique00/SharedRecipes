@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.co.recipes.domain.viewmodel.AuthViewModel
+import com.co.recipes.ui.common.screenContentPadding
 
 @Composable
 fun LoginScreen(authViewModel: AuthViewModel) {
@@ -34,7 +35,10 @@ fun LoginScreen(authViewModel: AuthViewModel) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                // Sits *outside* `verticalScroll` on purpose: `imePadding()` (inside this helper)
+                // must shrink the scrollport so the fields can be scrolled above the keyboard,
+                // instead of scrolling with the content.
+                .screenContentPadding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 32.dp),
             verticalArrangement = Arrangement.Center,

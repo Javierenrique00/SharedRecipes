@@ -25,6 +25,7 @@ import androidx.navigation.NavHostController
 import com.co.recipes.domain.dataclass.UserSession
 import com.co.recipes.domain.viewmodel.RecipeDetailViewModel
 import com.co.recipes.ui.common.ErrorState
+import com.co.recipes.ui.common.screenContentPadding
 import com.co.recipes.ui.navigation.RecipeEditor
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,7 +72,9 @@ fun RecipeDetailScreen(
                 }
 
             else -> LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                // Keeps the comment box above the keyboard (and, before it was handled, stopped
+                // Android from panning the video thumbnail over it).
+                modifier = Modifier.fillMaxSize().screenContentPadding(padding),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {

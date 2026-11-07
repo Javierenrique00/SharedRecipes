@@ -9,9 +9,21 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.SharedRecipes">
 
+        <!--
+          windowSoftInputMode="adjustResize" is what keeps the keyboard from moving the UI.
+
+          Without it the window uses the default adjustUnspecified mode, and with edge-to-edge
+          (targetSdk 35+ enforces it) the window is not resized for the keyboard, so the system
+          *pans* the whole window to keep the caret visible. That pan is recomputed every time
+          typing changes the layout, which is what made content slide over the editor's cells.
+          adjustResize disables the pan; the keyboard offset is then applied in Compose through
+          `Modifier.imePadding()` (see `Modifier.screenContentPadding` in
+          shared/src/commonMain/.../ui/common/Insets.kt).
+        -->
         <activity
             android:name="com.co.recipes.MainActivity"
             android:exported="true"
+            android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

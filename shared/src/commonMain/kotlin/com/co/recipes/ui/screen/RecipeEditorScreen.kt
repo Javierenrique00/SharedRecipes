@@ -5,10 +5,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -21,9 +21,20 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.co.recipes.domain.viewmodel.RecipeEditorViewModel
+import com.co.recipes.ui.common.screenContentPadding
+
+/**
+ * The description grows from three lines up to this many, then scrolls inside the field.
+ *
+ * The cap is what keeps the fields *below* it still while typing: with an unbounded `maxLines`
+ * every wrapped line re-lays-out the whole `LazyColumn`, so the YouTube/ingredient sections slid
+ * up and down under the caret.
+ */
+private const val DescriptionMaxLines = 6
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,7 +57,11 @@ fun RecipeEditorScreen(
         },
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
+            // `screenContentPadding` reserves the keyboard's height (see ui/common/Insets.kt):
+            // the list viewport ends where the IME starts, so a focused cell is scrolled above
+            // the keyboard once and then stays put, instead of the window panning on every
+            // keystroke.
+            modifier = Modifier.fillMaxSize().screenContentPadding(padding),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -56,6 +71,8 @@ fun RecipeEditorScreen(
                     onValueChange = { viewModel.title = it },
                     label = { Text("Title") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = nextCellActions(),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -66,6 +83,7 @@ fun RecipeEditorScreen(
                     onValueChange = { viewModel.description = it },
                     label = { Text("Description") },
                     minLines = 3,
+                    maxLines = DescriptionMaxLines,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -76,6 +94,8 @@ fun RecipeEditorScreen(
                     onValueChange = { viewModel.youtubeUrl = it },
                     label = { Text("YouTube URL") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = nextCellActions(),
                     supportingText = { Text("https://www.youtube.com/watch?v=...") },
                     modifier = Modifier.fillMaxWidth(),
                 )

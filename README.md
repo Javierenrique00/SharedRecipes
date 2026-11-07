@@ -261,6 +261,36 @@ Two notes for whoever changes the palette later:
 - `SharedRecipesTheme(darkTheme = true)` is the escape hatch for a preview or a test that needs a
   fixed appearance; production code always uses the default (system) detection.
 
+## Keyboard (IME) on Android
+
+The recipe editor is where this matters most, but the rule applies to every form: **the keyboard
+must never move the layout**. Two pieces make that true, and both are needed:
+
+| Piece | Where | What it does |
+|---|---|---|
+| `android:windowSoftInputMode="adjustResize"` | `androidApp/src/main/AndroidManifest.xml` (`MainActivity`) | Stops the system from *panning* the window to keep the caret visible. |
+| `Modifier.screenContentPadding(padding)` | `shared/src/commonMain/.../ui/common/Insets.kt`, used by the scrollable body of every `Scaffold` that contains a text field (recipe editor, recipe detail comment box, login) | Applies the Scaffold padding, consumes it (so the keyboard inset is not stacked on top of the nav-bar inset), then adds `imePadding()`. |
+
+Why both: the app targets SDK 37, where edge-to-edge is enforced, so the window is **not** resized
+for the keyboard. Without `adjustResize` the framework pans the whole window — and recomputes that
+pan every time typing changes the layout, which is what made content slide over the editor's cells.
+Without `imePadding()` the focused field stays underneath the keyboard, and Compose's
+`bringIntoView` keeps re-scrolling to chase the caret. Together they produce a viewport that ends
+where the keyboard starts: a tapped cell scrolls up once, smoothly, and then stays still.
+
+`enableEdgeToEdge()` in `MainActivity` makes API 26–34 report the same insets as Android 15+, so
+this one rule covers the whole supported range. `imePadding()` is common-code API in Compose
+Multiplatform 1.12.2 (real on Android/iOS, a no-op on desktop and the browser), so no screen needs
+a platform check.
+
+Two smaller rules keep the editor from twitching on its own:
+
+- Every single-line cell uses `imeAction = ImeAction.Next` together with `nextCellActions()`
+  (`RecipeEditorSections.kt`), which moves focus instead of closing the keyboard; closing it
+  re-runs the IME animation between cells.
+- Multi-line fields are capped (`Description` `maxLines = 6`, step fields `maxLines = 4`) so the
+  rows below them stop re-flowing on every wrapped line.
+
 ## Sessions and local storage
 
 Signing in persists an encrypted session, so the app re-opens on the recipe list
