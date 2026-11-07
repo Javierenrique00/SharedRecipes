@@ -19,6 +19,9 @@ class RecipesApiImpl(private val client: SupabaseClient) : RecipesApi {
     override suspend fun listRecipes(): Result<List<RecipeDto>> = apiCall {
         client.from("recipes")
             .select(columns = Columns.raw(SUMMARY_COLUMNS)) {
+                // Soft-deleted recipes stay in the table so they can be restored;
+                // every read has to exclude them explicitly.
+                filter { exact("deleted_at", null) }
                 order(column = "created_at", order = Order.DESCENDING)
             }
             .decodeList<RecipeDto>()
@@ -27,7 +30,10 @@ class RecipesApiImpl(private val client: SupabaseClient) : RecipesApi {
     override suspend fun getRecipe(id: String): Result<RecipeDto> = apiCall {
         client.from("recipes")
             .select(columns = Columns.raw(DETAIL_COLUMNS)) {
-                filter { eq("id", id) }
+                filter {
+                    eq("id", id)
+                    exact("deleted_at", null)
+                }
             }
             .decodeSingle<RecipeDto>()
     }
@@ -51,9 +57,12 @@ class RecipesApiImpl(private val client: SupabaseClient) : RecipesApi {
     }
 
     override suspend fun deleteRecipe(id: String): Result<Unit> = apiCall {
-        client.from("recipes").delete {
-            filter { eq("id", id) }
-        }
+        client.postgrest.rpc("delete_recipe", buildJsonObject { put("p_recipe_id", id) })
+        Unit
+    }
+
+    override suspend fun restoreRecipe(id: String): Result<Unit> = apiCall {
+        client.postgrest.rpc("restore_recipe", buildJsonObject { put("p_recipe_id", id) })
         Unit
     }
 

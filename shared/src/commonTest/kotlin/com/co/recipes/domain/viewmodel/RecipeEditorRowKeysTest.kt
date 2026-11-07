@@ -18,6 +18,9 @@ private class NoopRecipesApi : RecipesApi {
         Result.failure(NotImplementedError())
 
     override suspend fun deleteRecipe(id: String): Result<Unit> = Result.failure(NotImplementedError())
+    override suspend fun restoreRecipe(id: String): Result<Unit> =
+        Result.failure(NotImplementedError())
+
     override suspend fun addComment(recipeId: String, authorId: String, body: String): Result<Unit> =
         Result.failure(NotImplementedError())
 

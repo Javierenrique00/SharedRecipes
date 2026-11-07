@@ -20,11 +20,16 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -48,7 +53,40 @@ fun RecipeListScreen(
 ) {
     LaunchedEffect(Unit) { viewModel.refresh() }
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val recipes = viewModel.recipes
+    val error = viewModel.errorMessage
+
+    // Undo. The delete is a soft delete server side, so "Undo" only clears a column
+    // and the recipe comes back with its ingredients, steps and comments intact.
+    // Keyed on the recipe id, so deleting a second recipe re-arms the same snackbar;
+    // `finally` covers all the ways out (action taken, timeout, swiped away, or the
+    // screen leaving the composition), so navigating back cannot replay a stale bar.
+    val pendingDeletion = viewModel.pendingDeletion
+    LaunchedEffect(pendingDeletion?.recipe?.id) {
+        val pending = pendingDeletion ?: return@LaunchedEffect
+        try {
+            val result = snackbarHostState.showSnackbar(
+                message = "“${pending.recipe.title}” deleted",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Long,
+            )
+            if (result == SnackbarResult.ActionPerformed) viewModel.undoDelete()
+        } finally {
+            viewModel.dismissUndo(pending.recipe.id)
+        }
+    }
+
+    // A failed delete with rows on screen would otherwise be silent: the full-screen
+    // ErrorState below only renders for an empty list.
+    LaunchedEffect(error) {
+        if (error == null || recipes.isEmpty()) return@LaunchedEffect
+        snackbarHostState.showSnackbar(error)
+        viewModel.clearError()
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Recipes") },
@@ -73,9 +111,6 @@ fun RecipeListScreen(
         },
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            val recipes = viewModel.recipes
-            val error = viewModel.errorMessage
-
             when {
                 viewModel.isLoading && recipes.isEmpty() ->
                     CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -100,7 +135,7 @@ fun RecipeListScreen(
                             recipe = recipe,
                             isAdmin = session.isAdmin,
                             onClick = { navController.navigate(RecipeDetail(recipe.id)) },
-                            onDelete = { viewModel.delete(recipe.id) },
+                            onDelete = { viewModel.delete(recipe) },
                         )
                     }
                 }

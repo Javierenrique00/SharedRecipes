@@ -22,6 +22,20 @@ class RecipeListViewModel(private val recipesApi: RecipesApi) : ViewModel() {
     var errorMessage by mutableStateOf<String?>(null)
         private set
 
+    /**
+     * The recipe that was just deleted, kept only so the screen can offer Undo.
+     *
+     * Nothing is re-inserted from the client: the row is still there with
+     * `deleted_at` set, so [undoDelete] restores it in place and the id, the
+     * ingredients, the steps and the comments (including other users' comments,
+     * which RLS would never let an admin re-create) all come back unchanged.
+     */
+    var pendingDeletion by mutableStateOf<PendingDeletion?>(null)
+        private set
+
+    /** [index] is where the card was in [recipes], so Undo puts it back in order. */
+    data class PendingDeletion(val recipe: Recipe, val index: Int)
+
     fun refresh() {
         viewModelScope.launch {
             isLoading = true
@@ -33,12 +47,44 @@ class RecipeListViewModel(private val recipesApi: RecipesApi) : ViewModel() {
         }
     }
 
-    fun delete(recipeId: String) {
+    fun delete(recipe: Recipe) {
+        val index = recipes.indexOfFirst { it.id == recipe.id }
+        if (index < 0) return
+
+        val beforeDelete = recipes
+        // Optimistic: the card disappears now and the snackbar offers Undo; on failure
+        // the whole list comes back and the message explains why.
+        recipes = beforeDelete.filterNot { it.id == recipe.id }
+
         viewModelScope.launch {
-            recipesApi.deleteRecipe(recipeId)
-                .onSuccess { recipes = recipes.filterNot { it.id == recipeId } }
+            recipesApi.deleteRecipe(recipe.id)
+                .onSuccess { pendingDeletion = PendingDeletion(recipe = recipe, index = index) }
+                .onFailure {
+                    recipes = beforeDelete
+                    errorMessage = it.readableMessage()
+                }
+        }
+    }
+
+    /** Undo for the last [delete]: clears `deleted_at` and puts the card back. */
+    fun undoDelete() {
+        val pending = pendingDeletion ?: return
+        pendingDeletion = null
+
+        viewModelScope.launch {
+            recipesApi.restoreRecipe(pending.recipe.id)
+                .onSuccess {
+                    recipes = recipes.toMutableList().apply {
+                        add(pending.index.coerceIn(0, size), pending.recipe)
+                    }
+                }
                 .onFailure { errorMessage = it.readableMessage() }
         }
+    }
+
+    /** The Undo snackbar went away without being used; forget that deletion. */
+    fun dismissUndo(recipeId: String) {
+        if (pendingDeletion?.recipe?.id == recipeId) pendingDeletion = null
     }
 
     fun clearError() {

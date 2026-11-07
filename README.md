@@ -17,6 +17,14 @@ Authorization is enforced **in Postgres** (Row Level Security), not in the app. 
 KMP client ships only the publishable key, so a modified client cannot exceed these
 rules.
 
+Deleting is undoable. An admin's delete is a **soft** delete — `delete_recipe` stamps
+`public.recipes.deleted_at` instead of removing the row — so the list can show an
+**Undo** snackbar and `restore_recipe` simply clears the column. The recipe comes back
+with the same id, ingredients, steps and comments (including comments written by other
+users, which RLS would never let the admin re-create). Reads filter
+`deleted_at is null`, and the select policy hides deleted recipes from clients; the
+`delete` policy is kept so an admin can still purge a row for real.
+
 ## Repository layout
 
 ```
@@ -343,5 +351,7 @@ private-mode or quota failures fall back to "sign in again" instead of crashing.
 - Clients cannot change their own `role`: `update` on `profiles` is granted **per column**
   (`display_name` only), so the column is unwritable regardless of any policy.
 - The role is read from `profiles`, never from `raw_user_meta_data` (which users can edit).
-- `create_recipe` / `update_recipe` run as `SECURITY INVOKER`, so RLS still applies to the
-  caller; a non-admin calling them directly is rejected by the policy on `recipes`.
+- `create_recipe` / `update_recipe` / `delete_recipe` / `restore_recipe` run as
+  `SECURITY INVOKER`, so RLS still applies to the caller; a non-admin calling them
+  directly is rejected by the policies on `recipes` (for the two `update`-based ones
+  the call simply touches zero rows, i.e. the recipe stays in place and stays visible).
