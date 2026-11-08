@@ -335,6 +335,46 @@ Two caveats worth knowing: the artwork occupies 664 px of the 1024 px source, so
 but a higher-resolution source would be sharper if one exists); and an already-installed
 app keeps its cached launcher icon until it is reinstalled or the launcher cache clears.
 
+## Welcome illustration (login screen)
+
+The login screen opens with the chef waving from a pot, centred in the top quarter of the
+screen. Its master is `branding/sheff_welcoming.png`: 1024×1024 **RGBA with a genuinely
+transparent background** (all four corners are `alpha = 0`), the drawing occupying the middle
+783×884 px. So, unlike the app icon, it needs no white→transparent conversion — only a trim
+and a resize into the source set the app bundles from:
+
+```bash
+magick branding/sheff_welcoming.png -trim +repage -filter Lanczos -resize x512 \
+  -depth 8 -strip -define png:compression-level=9 \
+  shared/src/commonMain/composeResources/drawable/sheff_welcoming.png
+```
+
+Why a derived copy instead of the master: this single PNG is copied into **all four**
+artifacts (Android assets, iOS framework, desktop jar, web bundle), and the 512 px-tall
+version is 159 KB against 359 KB for the 1024 px master. The trim is what makes the drawing
+fill its box instead of floating inside the master's transparent margin; 512 px keeps it
+sharp up to ~2× density in a quarter-height box without quantising the soft alpha edges
+(`-colors 256` would save a further ~120 KB but band them).
+
+It is the only image the app bundles, and common code reaches it through the Compose
+resources library. That is why `shared/build.gradle.kts` carries three extra lines:
+`implementation(compose.components.resources)`, `androidResources.enable = true` inside the
+`androidLibrary {}` block (without it the `Res` accessors are not packaged for that target)
+and a `compose.resources { packageOfResClass = "com.co.recipes.resources" }` block (the
+default would be `shared.generated.resources`, because the project sets no `group`).
+`LoginScreen` reads `Res.drawable.sheff_welcoming` through `painterResource()`, with
+`contentDescription = null` because the drawing is decorative — the headline beside it
+already names the app, so a description would only be read out twice. Known nit: on `wasmJs`
+`painterResource()` returns an empty painter for the first frame and swaps the image in
+right after, so the chef pops in a frame after the page loads.
+
+Layout-wise the screen is one **non-scrollable** column — `screenContentPadding()` and its
+`imePadding()` must stay outside the scroll, see *Keyboard (IME) on Android* — holding the
+image's `Box` weighted `1f` above the form's `Column` weighted `3f`. 1 : 3 is exactly the
+first quarter of the usable height, and it keeps holding when the window is resized, the
+phone rotates or the keyboard shrinks the column (the drawing shrinks with it), with nothing
+measured in code.
+
 ## Light / dark theme
 
 The UI follows the operating system's appearance on **all four targets**; there is no in-app
