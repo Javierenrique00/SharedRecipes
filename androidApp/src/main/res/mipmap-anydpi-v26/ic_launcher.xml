@@ -10,9 +10,12 @@
     * background  a vertical gradient reusing the artwork's own edge colours, so the
                   launcher mask (circle, squircle or rounded square) is filled with
                   something that belongs to the drawing instead of a hard edge;
-    * foreground  the artwork at 100% of the 108dp layer with transparent corners,
-                  which is what lets the gradient show through where the drawing is
-                  rounded and makes the two layers read as one full-bleed icon.
+    * foreground  the artwork at 70% of the 108dp layer, centred and with
+                  transparent corners. Only the inner 72dp of the layer is ever
+                  visible (the rest is what the mask cuts away), so drawing at
+                  100% cropped the artwork's border ring and read as zoomed in;
+                  70% keeps that border on screen and still lets the gradient
+                  reach the edge where the drawing is rounded.
 
   No `monochrome` layer: Android 13+ themed icons want a single-colour silhouette, and
   this artwork is a full-colour illustration whose only silhouette is the rounded square

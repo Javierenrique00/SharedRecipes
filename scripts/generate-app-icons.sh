@@ -123,17 +123,29 @@ magick "$WORK/fullbleed.png" -strip -define png:compression-level=9 \
 # 4. Android.
 #
 # Adaptive icons (API 26+, which is this app's minSdk) are drawn on a 108dp
-# canvas that the launcher masks into a circle/squircle/rounded square. The
-# drawing goes in the *foreground* at 100% of that canvas, with its corners
-# transparent so the gradient background shows through them; the two layers then
-# read as one full-bleed icon, and nothing important is lost, because the artwork
-# only reaches the outer edge near the vertical middle where the mask is widest.
+# canvas that the launcher masks into a circle/squircle/rounded square. Only the
+# inner 72dp of that canvas is visible, so a foreground drawn at 100% gets its
+# outer third cropped by every mask — which is exactly what made the icon look
+# zoomed in, with the artwork's cream border ring and corner sparkles cut off.
+# The drawing is therefore scaled to ANDROID_FOREGROUND_SCALE of the layer and
+# centred on it, so the whole rounded square survives the mask and only the
+# gradient background reaches the edge. Corners stay transparent, so the two
+# layers still read as one icon.
 #
 # Only the layers are generated. No legacy mipmap-*dpi/ic_launcher.png fallbacks:
 # with minSdk 26 the anydpi XML always wins over a density bucket, so those PNGs
 # would be dead weight that lint flags (IconXmlAndPng).
 # ---------------------------------------------------------------------------
 RES="$ROOT/androidApp/src/main/res"
+
+# How much of the 108dp layer the drawing fills, in percent. 70 leaves the
+# artwork inside the 72dp visible area (70% = 75.6dp, so only the outermost
+# sliver of the border is shaved, at the edge midpoints of a circular mask),
+# which is what makes the border ring and the sparkles next to it visible on
+# every launcher shape. Raise it towards 100 for a tighter, full-bleed crop;
+# drop it to ~61 to sit inside the 66dp safe zone instead.
+ANDROID_FOREGROUND_SCALE=70
+
 android_foreground_size() {
     # <density> -> px of the 108dp adaptive layer at that scale
     case "$1" in
@@ -149,8 +161,12 @@ for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
     read -r fg_size <<EOF
 $(android_foreground_size "$density")
 EOF
-    log "res/drawable-$density/ic_launcher_foreground.png (${fg_size}px)"
-    png "$ART" "$fg_size" "$RES/drawable-$density/ic_launcher_foreground.png"
+    art_size=$((fg_size * ANDROID_FOREGROUND_SCALE / 100))
+    log "res/drawable-$density/ic_launcher_foreground.png (${fg_size}px layer, ${art_size}px drawing)"
+    magick "$ART" -filter Lanczos -resize "${art_size}x${art_size}" \
+        -background none -gravity center -extent "${fg_size}x${fg_size}" \
+        -depth 8 -strip -define png:compression-level=9 \
+        "$RES/drawable-$density/ic_launcher_foreground.png"
 done
 
 # ---------------------------------------------------------------------------

@@ -288,14 +288,19 @@ they would be dead weight in the APK.) Two layers:
 - **background** — a vertical gradient in the artwork's own edge colours (`#FBD58C` →
   `#FE7257`). It fills whatever the launcher's mask cuts away (circle, squircle, rounded
   square) with something that belongs to the drawing.
-- **foreground** — the drawing at **100 %** of the 108 dp layer, corners transparent, so
-  the gradient shows through them and the two layers read as one full-bleed icon.
+- **foreground** — the drawing at **70 %** of the 108 dp layer, centred, corners
+  transparent, so the gradient fills the space around it and the two layers read as one
+  icon.
 
-The drawing is safe at full bleed because it only approaches the outer edge near the
-vertical middle, where a circular mask is widest (the spoon/fork tips sit ~43 dp from
-the centre against a 54 dp mask radius). Placing it in the 66 dp safe zone instead —
-the reflex fix — was tried and rejected: at that size it reads as a sticker *inside* the
-icon, which is why it sits at 100 %.
+The 70 % is not cosmetic: an adaptive icon only ever shows the inner 72 dp of its 108 dp
+layer (the outer 18 dp on each side exist for launcher parallax and are masked away), so a
+foreground drawn at 100 % lost its outer third to the mask — the artwork's cream border
+ring and corner sparkles were never visible and the icon read as zoomed in. At 70 % the
+drawing is 75.6 dp, which brings the border back on every launcher shape; the last
+millimetre at the edge midpoints still sits under a circular mask, so drop
+`ANDROID_FOREGROUND_SCALE` in `scripts/generate-app-icons.sh` to ~61 (the 66 dp safe zone)
+if a fully framed icon is preferred over a fuller one, and raise it back towards 100 for
+the old full-bleed crop.
 
 There is deliberately no `monochrome` layer: Android 13+ themed icons want a
 single-colour silhouette, and the only silhouette this artwork has is the rounded square
