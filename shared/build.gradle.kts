@@ -124,6 +124,17 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "com.co.recipes"
             packageVersion = "1.0.0"
+
+            // jpackage takes one image per OS. All three come from
+            // branding/app-icon-source.jpeg via scripts/generate-app-icons.sh, which
+            // renders the artwork floating on a transparent canvas (Apple's icon grid plus
+            // a soft shadow) because a hard white-backed square looks wrong in the Dock and
+            // the Start menu. They live outside src/jvmMain/resources on purpose: only the
+            // window icon (`app-icon.png`) needs to be on the classpath, and .icns/.ico are
+            // dead weight inside the jar.
+            macOS { iconFile.set(project.file("icons/app-icon.icns")) }
+            windows { iconFile.set(project.file("icons/app-icon.ico")) }
+            linux { iconFile.set(project.file("icons/app-icon.png")) }
         }
     }
 }

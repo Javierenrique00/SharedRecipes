@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Background layer of the adaptive launcher icon (see mipmap-anydpi-v26/ic_launcher.xml).
+
+  The gradient repeats the artwork's own edge colours — light yellow #FBD58C at the top,
+  coral #FE7257 at the bottom — so that the transparent rounded corners of
+  drawable-*dpi/ic_launcher_foreground.png blend into it and the launcher mask never
+  shows a seam. WARM_YELLOW and CORAL in scripts/generate-app-icons.sh are the same two
+  colours; keep them in sync if the artwork is ever replaced.
+
+  `angle` 270 runs the gradient top -> bottom (0 would be left -> right).
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#FBD58C"
+        android:endColor="#FE7257" />
+</shape>

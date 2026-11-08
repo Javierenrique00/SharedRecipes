@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Lint suppressions for the app module. Each entry documents something the check cannot
+  know; there are no blanket disables here.
+-->
+<lint>
+    <!--
+      ObsoleteSdkInt flags res/mipmap-anydpi-v26 as "unnecessary; minSdkVersion is 26,
+      merge into mipmap-anydpi". The advice does not hold: renaming the folder to plain
+      `mipmap-anydpi` makes the resource merger drop it entirely, and AAPT then fails with
+      "resource mipmap/ic_launcher not found" (verified on AGP 9.5.1, also after clearing
+      build/intermediates/merged_res and .../incremental). The version qualifier is what
+      makes the adaptive-icon XML merge, so it stays and the warning is suppressed here.
+    -->
+    <issue id="ObsoleteSdkInt">
+        <ignore path="src/main/res/mipmap-anydpi-v26" />
+    </issue>
+</lint>

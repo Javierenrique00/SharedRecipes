@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shared Recipes</title>
     <!--
+        App icons + web app manifest. Paths are relative (no leading slash) on purpose:
+        GitHub Pages serves this build under /SharedRecipes/, and the files sit next to
+        index.html in the distribution — they are authored in this same directory
+        (src/wasmJsMain/resources) and copied verbatim by wasmJsBrowserDistribution.
+        The PNG favicons carry transparency so they read on light and dark tab bars;
+        apple-touch-icon is opaque because iOS composites alpha onto black.
+    -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="manifest" href="site.webmanifest">
+    <!--
         `color-scheme` lets the browser paint scrollbars and form chrome for the active theme
         instead of inverting our canvas; the theme-color pair tints mobile browser UI. Both are
         the MaterialTheme backgrounds: #FEF7FF (lightColorScheme) / #141218 (darkColorScheme).

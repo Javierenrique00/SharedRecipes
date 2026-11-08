@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive launcher icon. minSdk is 26, which is exactly the API level adaptive icons
+  arrived in, so this file — not the density PNGs next to it — is what every supported
+  Android version renders. The mipmap-*dpi bitmaps are kept as fallbacks for tooling
+  that reads mipmaps directly (and to silence lint's IconMissingDensityFolder).
+
+  Both layers are generated from branding/app-icon-source.jpeg by
+  scripts/generate-app-icons.sh:
+    * background  a vertical gradient reusing the artwork's own edge colours, so the
+                  launcher mask (circle, squircle or rounded square) is filled with
+                  something that belongs to the drawing instead of a hard edge;
+    * foreground  the artwork at 100% of the 108dp layer with transparent corners,
+                  which is what lets the gradient show through where the drawing is
+                  rounded and makes the two layers read as one full-bleed icon.
+
+  No `monochrome` layer: Android 13+ themed icons want a single-colour silhouette, and
+  this artwork is a full-colour illustration whose only silhouette is the rounded square
+  itself — a tinted blob. Without one, Android 16 QPR2 and above simply tint the colour
+  version, which looks better than a meaningless silhouette, so lint's
+  MonochromeLauncherIcon warning is suppressed here deliberately.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="MonochromeLauncherIcon">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>

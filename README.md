@@ -30,13 +30,16 @@ users, which RLS would never let the admin re-create). Reads filter
 ```
 supabase/migrations/          SQL migrations (schema, RLS, atomic write RPCs)
 supabase/seed.sql             Sample recipe (Pad Thai)
+branding/                     Icon source artwork + the transparent master it generates
+scripts/                      generate-app-icons.sh — every platform icon, from that artwork
 shared/                       Kotlin Multiplatform module — UI + data layer
   src/commonMain/             Compose UI, view models, API clients, DTOs
   src/androidMain/            Android Activity bridge
   src/iosMain/                UIViewController bridge
-  src/jvmMain/                Desktop entry point (main.kt)
+  src/jvmMain/                Desktop entry point (main.kt) + the window icon it loads
   src/wasmJsMain/             Browser entry point (main.kt), localStorage session store and
-                              the index.html host page
+                              the index.html host page + favicons/web manifest
+  icons/                      .icns/.ico/.png handed to jpackage for the desktop builds
 androidApp/                   Android application module (AGP 9 requires the split)
 gradle/libs.versions.toml     Single source of truth for dependency versions
 ```
@@ -230,6 +233,88 @@ Two limits worth knowing:
 - The Kotlin code is compiled by the Gradle task, so a source change needs the
   configuration re-run (the page reloads from the new bundle). For a compile-on-save loop,
   keep `./gradlew :shared:wasmJsBrowserDevelopmentRun --continuous` running in a terminal.
+
+## App icons
+
+One artwork drives the launcher icon on all four targets:
+`branding/app-icon-source.jpeg`. Nothing is hand-edited — every file below is produced
+by
+
+```bash
+./scripts/generate-app-icons.sh          # requires ImageMagick 7, plus iconutil (macOS) for the .icns
+```
+
+so re-branding the app is "drop in a new JPEG, re-run the script".
+
+**The white background is converted, not cropped.** The source is an opaque JPEG: a
+rounded-square cartoon sitting on a flat white canvas, taking up only the middle
+663 px of the 1024 px frame. The script flood-fills white *and* near-white to alpha
+from the four corners (`-fuzz 12%`, calibrated against the artwork's lightest pixel
+`#FBD58C`), which is what lets the same drawing float on the macOS Dock, the Windows
+Start menu, a browser tab bar and Android's adaptive foreground layer without a white
+square behind it. Verified clean at 500 % zoom on a dark backdrop, so no de-fringe pass
+is needed. The crop is padded back to a square so every resize stays exact.
+
+| Target | File(s) | Alpha | Why |
+|---|---|---|---|
+| iOS | `iosApp/…/AppIcon.appiconset/app-icon-1024.png` | **opaque** | Apple rejects transparency, so the rounded corners are filled with a blurred copy of the artwork (full bleed) |
+| Android | `res/mipmap-anydpi-v26/ic_launcher{,_round}.xml` + `res/drawable-*dpi/ic_launcher_foreground.png` + `res/drawable/ic_launcher_background.xml` | foreground transparent | adaptive icon, see below |
+| Desktop | `shared/icons/app-icon.{icns,ico,png}` | transparent | jpackage icon per OS; the drawing floats on Apple's grid (824 px body) with a soft shadow |
+| Desktop (`run`) | `shared/src/jvmMain/resources/app-icon.png` | transparent | window icon, see the note below |
+| Web | `favicon.ico`, `favicon-{16,32}.png`, `icon-{192,512}.png` | transparent | legible on light *and* dark tab bars |
+| Web (PWA) | `apple-touch-icon.png`, `icon-maskable-512.png`, `site.webmanifest` | **opaque** | iOS composites alpha onto black; a maskable icon needs an opaque 80 % safe zone |
+
+### Android adaptive layers
+
+`minSdk` is 26, which is exactly where adaptive icons start, so the XML is the only form
+Android needs — there are no legacy `mipmap-*dpi/ic_launcher.png` fallbacks. (An `anydpi`
+resource always wins over a density bucket at runtime, and lint flags the duplication, so
+they would be dead weight in the APK.) Two layers:
+
+- **background** — a vertical gradient in the artwork's own edge colours (`#FBD58C` →
+  `#FE7257`). It fills whatever the launcher's mask cuts away (circle, squircle, rounded
+  square) with something that belongs to the drawing.
+- **foreground** — the drawing at **100 %** of the 108 dp layer, corners transparent, so
+  the gradient shows through them and the two layers read as one full-bleed icon.
+
+The drawing is safe at full bleed because it only approaches the outer edge near the
+vertical middle, where a circular mask is widest (the spoon/fork tips sit ~43 dp from
+the centre against a 54 dp mask radius). Placing it in the 66 dp safe zone instead —
+the reflex fix — was tried and rejected: at that size it reads as a sticker *inside* the
+icon, which is why it sits at 100 %.
+
+There is deliberately no `monochrome` layer: Android 13+ themed icons want a
+single-colour silhouette, and the only silhouette this artwork has is the rounded square
+itself — tinting that produces a blob. Without the layer, Android 16 QPR 2 and above tint
+the colour version instead, which looks better than a meaningless shape, so
+`MonochromeLauncherIcon` is suppressed with `tools:ignore` in both XMLs (lint stays
+clean and the decision is recorded where the layer would live).
+
+### Desktop and web notes
+
+- jpackage takes one image per OS, wired in `compose.desktop.nativeDistributions`
+  (`macOS`/`windows`/`linux { iconFile … }`). They live in `shared/icons/` rather than
+  `src/jvmMain/resources` on purpose: only the window icon has to be on the classpath,
+  and `.icns`/`.ico` would just be dead weight inside the jar.
+- `./gradlew :shared:run` is not a jpackage bundle and would show Compose's default
+  icon, so `main.kt` loads `app-icon.png` and passes it to `Window`. It is decoded with
+  `ImageIO`/`toComposeImageBitmap` rather than `painterResource(String)` because that
+  overload is deprecated in Compose Multiplatform 1.12 in favour of the Compose
+  resources library — which would package this desktop-only image into the Android and
+  web artifacts too. On macOS the *Dock* keeps the JVM icon until the packaged `.app`
+  is launched; that is a platform limitation, not a bug.
+- The web files are authored in `shared/src/wasmJsMain/resources`, which
+  `wasmJsBrowserDistribution` copies verbatim, so the existing Pages workflow ships them
+  with no extra step. Every `href` in `index.html` is **relative** (no leading slash)
+  because the site is served under `/SharedRecipes/`.
+- The icons are committed binaries (~8 MB together, the 2 MB transparent master and the
+  2 MB `.icns` being most of it) because they are build inputs no tool regenerates on its
+  own. Deleting them and re-running the script reproduces them.
+
+Two caveats worth knowing: the artwork occupies 664 px of the 1024 px source, so the
+1024 px icons are a ~1.54× Lanczos upscale (invisible on flat cartoon art at icon sizes,
+but a higher-resolution source would be sharper if one exists); and an already-installed
+app keeps its cached launcher icon until it is reinstalled or the launcher cache clears.
 
 ## Light / dark theme
 
