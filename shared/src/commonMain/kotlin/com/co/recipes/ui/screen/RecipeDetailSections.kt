@@ -22,6 +22,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.co.recipes.domain.dataclass.Comment
@@ -74,17 +76,33 @@ internal fun SectionTitle(text: String) {
     )
 }
 
+/**
+ * One ingredient as "name ........ quantity unit".
+ *
+ * The name carries the weight, not the amount: Compose measures unweighted children first, so
+ * the amount keeps its intrinsic width (one line, flush right) and the name absorbs whatever is
+ * left, wrapping downwards. Without the weight the name grabbed the whole row and the amount was
+ * squeezed into a one-character column, which wrapped vertically one glyph per line.
+ */
 @Composable
 internal fun IngredientRow(name: String, display: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top,
     ) {
-        Text(name, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = name,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
         Text(
             text = display.removeSuffix(name).trim(),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.End,
         )
     }
 }
