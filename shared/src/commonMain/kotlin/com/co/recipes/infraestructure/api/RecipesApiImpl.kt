@@ -155,17 +155,28 @@ class RecipesApiImpl(private val client: SupabaseClient) : RecipesApi {
         )
     }
 
-    private companion object {
-        const val SUMMARY_COLUMNS =
-            "id,title,description,youtube_id,servings,prep_minutes,cook_minutes,created_at"
+    // internal (not private) only so RecipeColumnsTest can pin the projections: a
+    // summary select that forgets a child silently renders "0 ingredients" on every
+    // card instead of failing.
+    internal companion object {
+        const val COMMON_COLUMNS =
+            "id,title,description,youtube_url,youtube_id,servings,prep_minutes,cook_minutes," +
+                "created_at"
+
+        // Child ordering is not guaranteed by PostgREST, so the mapper sorts.
+        const val INGREDIENT_COLUMNS = "recipe_ingredients(id,position,quantity,unit,name)"
+        const val STEP_COLUMNS = "recipe_steps(id,step_number,instruction)"
+        const val COMMENT_COLUMNS = "recipe_comments(id,recipe_id,author_id,body,created_at)"
+
+        // The list card renders "${recipe.ingredients.size} ingredients" and
+        // "${recipe.comments.size} comments", so both children have to be embedded:
+        // RecipeDto defaults a child that was not selected to emptyList(), which is what
+        // made every card read "0 ingredients". Steps stay out of the summary — the card
+        // never shows them.
+        const val SUMMARY_COLUMNS = "$COMMON_COLUMNS,$INGREDIENT_COLUMNS,$COMMENT_COLUMNS"
 
         // Nested selects: one round trip for a whole detail screen.
-        // Child ordering is not guaranteed by PostgREST, so the mapper sorts.
         const val DETAIL_COLUMNS =
-            "id,title,description,youtube_url,youtube_id,servings,prep_minutes,cook_minutes," +
-                "created_at," +
-                "recipe_ingredients(id,position,quantity,unit,name)," +
-                "recipe_steps(id,step_number,instruction)," +
-                "recipe_comments(id,recipe_id,author_id,body,created_at)"
+            "$COMMON_COLUMNS,$INGREDIENT_COLUMNS,$STEP_COLUMNS,$COMMENT_COLUMNS"
     }
 }
