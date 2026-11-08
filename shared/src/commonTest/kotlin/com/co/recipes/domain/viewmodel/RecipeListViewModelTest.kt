@@ -2,6 +2,8 @@ package com.co.recipes.domain.viewmodel
 
 import com.co.recipes.infraestructure.api.RecipesApi
 import com.co.recipes.infraestructure.dataclass.CreateRecipeParams
+import com.co.recipes.infraestructure.dataclass.ImportSummary
+import com.co.recipes.infraestructure.dataclass.RecipeBackupDto
 import com.co.recipes.infraestructure.dataclass.RecipeDto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -50,6 +52,21 @@ private class RecordingRecipesApi(
         Result.failure(NotImplementedError())
 
     override suspend fun deleteComment(commentId: String): Result<Unit> =
+        Result.failure(NotImplementedError())
+
+    // The list screen never touches the admin API; these exist because the interface grew
+    // for the admin console (migration 9) and this fake has to keep compiling.
+    override suspend fun exportRecipes(): Result<List<RecipeBackupDto>> =
+        Result.failure(NotImplementedError())
+
+    override suspend fun importRecipes(
+        recipes: List<RecipeBackupDto>,
+    ): Result<ImportSummary> = Result.failure(NotImplementedError())
+
+    override suspend fun restoreRecipes(ids: List<String>): Result<Int> =
+        Result.failure(NotImplementedError())
+
+    override suspend fun clearRecipes(hard: Boolean): Result<Int> =
         Result.failure(NotImplementedError())
 }
 

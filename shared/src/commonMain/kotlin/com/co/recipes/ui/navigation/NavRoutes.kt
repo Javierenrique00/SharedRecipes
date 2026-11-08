@@ -14,3 +14,7 @@ data class RecipeDetail(val recipeId: String)
 /** `recipeId == null` means "create a new recipe". */
 @Serializable
 data class RecipeEditor(val recipeId: String? = null)
+
+/** Admin-only: backup, restore and clear the whole collection. */
+@Serializable
+object AdminRecipes

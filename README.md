@@ -9,6 +9,8 @@ A shared recipe collection with two roles:
 | Read comments | ✅ | ✅ |
 | Comment | ✅ | ✅ (own comments only) |
 | Moderate comments | ✅ | ❌ |
+| Export a recipe to PDF / Markdown | ✅ | ✅ |
+| Backup / restore / clear recipes | ✅ | ❌ |
 
 Recipes hold an optional YouTube video, an ordered ingredient ("components") list
 and an ordered procedure ("method").
@@ -28,7 +30,7 @@ users, which RLS would never let the admin re-create). Reads filter
 ## Repository layout
 
 ```
-supabase/migrations/          SQL migrations (schema, RLS, atomic write RPCs)
+supabase/migrations/          SQL migrations (schema, RLS, atomic write RPCs, admin backup)
 supabase/seed.sql             Sample recipe (Pad Thai)
 branding/                     Icon source artwork + the transparent master it generates
 scripts/                      generate-app-icons.sh — every platform icon, from that artwork
@@ -44,6 +46,17 @@ androidApp/                   Android application module (AGP 9 requires the spl
 gradle/libs.versions.toml     Single source of truth for dependency versions
 ```
 
+Five packages carry the export/administration features, kept out of the UI on purpose:
+
+| Package (`shared/src/commonMain/...`) | What lives there |
+|---|---|
+| `domain/backup` | `RecipeBackupCodec` — reads/writes the admin backup file (pure Kotlin) |
+| `domain/export` | Markdown renderer, file-name slugs, the `RecipeExporter` contract, export timestamps |
+| `infraestructure/files` | `DocumentFileStore` on top of FileKit: open/save dialogs, `expect`ed save on the web |
+| `infraestructure/pdf` | The hand-written PDF writer (text layout, pages, xref) — see *Exporting a recipe* |
+| `infraestructure/export` | `RecipeExporterImpl`: wires a recipe to Markdown bytes or PDF bytes and saves it |
+
+
 ## Toolchain (verified working together)
 
 | Component | Version | Note |
@@ -52,6 +65,7 @@ gradle/libs.versions.toml     Single source of truth for dependency versions
 | supabase-kt | 3.9.0 (`auth-kt`, `postgrest-kt`) | |
 | Compose Multiplatform | 1.12.2 | |
 | Ktor | 3.6.1 | |
+| FileKit | 0.17.0 (`filekit-dialogs`) | Open/save dialogs for the backup and the exports: Android SAF, iOS Files picker, AWT on the desktop, a download in the browser |
 | AGP | 9.5.1 | CMP 1.12 depends on `lifecycle 2.11`, which requires AGP ≥ 9.1 |
 | Gradle | 9.8.2 | |
 | Android | minSdk 26, compileSdk 37 | supabase-kt requires minSdk 26 |
@@ -411,14 +425,100 @@ old plaintext `session` entry into the secure store once and then deletes it, so
 nobody is signed out by the switch.
 
 Android note: `startSharedRecipes()` calls `SecureStoreInitializer.init(applicationContext)`
-before the Compose tree starts; calling `App()` without it fails fast with a clear
-message rather than silently losing the session.
+before the Compose tree starts, and `FileKit.init(this)` so the file dialogs used by the
+admin backup and the exports can reach the Activity's `ActivityResultRegistry`. Calling
+`App()` without the first one fails fast with a clear message rather than silently losing
+the session; without the second, opening a dialog throws `FileKitNotInitializedException`.
 
 Web note: browsers give scripts no keychain and `SecureStore` is synchronous, so the web
 build keeps the session in plaintext `localStorage` — the same trade-off as Desktop, but
 with a real XSS surface because any script on the app's origin can read it. Nothing else is
 persisted (still no password), `localStorage` is per-origin, and every access is guarded so
 private-mode or quota failures fall back to "sign in again" instead of crashing.
+## Recipe administration (admin)
+
+The **Admin** action in the recipe list's top bar opens a console with four cards. It is
+only rendered for admins, and every call behind it is admin-checked in Postgres
+(`public.is_admin()`), so hiding the button is convenience, not security.
+
+| Action | What happens |
+|---|---|
+| **Backup** | `admin_export_recipes()` returns the whole collection as one `jsonb` array (soft-deleted recipes, ingredients, steps and comments included) and the app writes it to `recipes-backup-<date>.json` through the save dialog. |
+| **Restore** | Pick a backup file → every recipe in it is listed with a checkbox and a `new` / `update` badge → only the ticked ones are imported (`admin_import_recipes`). |
+| **Deleted recipes** | Soft-deleted recipes are listed with checkboxes; `admin_restore_recipes` clears `deleted_at` on the selected ones (or all of them). |
+| **Clear** | `admin_clear_recipes`: *soft* by default (recoverable, shows up in the deleted list), or permanent after typing `DELETE`. |
+
+Why restoring is not "insert the rows again": `admin_import_recipes` upserts **on the
+recipe id** and clears `deleted_at`, so importing the same file twice updates instead of
+duplicating, and "clear everything, then restore the two I want" works — the recipes come
+back with their original ids, so links and comment authorship keep pointing at the same
+rows. Comments are re-attached only when the author profile still exists, and are never
+overwritten (words written after the backup survive a restore). A row that cannot be
+imported (bad number, over-long text) is skipped and counted instead of aborting the file.
+
+The file is deliberately boring: the keys are the column names, so it is a transparent dump
+of the tables that a DBA can read, diff and hand-edit.
+
+```json
+{
+  "formatVersion": 1,
+  "app": "Shared Recipes",
+  "exportedAt": "2026-11-08T09:41:12Z",
+  "recipes": [
+    {
+      "id": "3f7c…",
+      "title": "Pad Thai",
+      "description": "Rice noodles with tamarind.",
+      "youtube_url": "https://www.youtube.com/watch?v=BWk1C0dMj8o",
+      "servings": 2, "prep_minutes": 20, "cook_minutes": 10,
+      "created_at": "2026-11-01T10:00:00Z",
+      "deleted_at": null,
+      "ingredients": [{ "position": 0, "quantity": 200, "unit": "g", "name": "flat rice noodles" }],
+      "steps": [{ "step_number": 1, "instruction": "Soak the noodles." }],
+      "comments": [{ "id": "9a1…", "author_id": "b02…", "body": "Extra lime.", "created_at": "…" }]
+    }
+  ]
+}
+```
+
+`formatVersion` is checked on read: a file from a newer build is refused with an
+explanation instead of being half-restored. Unknown keys are ignored, so adding fields
+later does not break older builds.
+
+## Exporting a recipe (PDF or Markdown)
+
+Every signed-in user gets an **Export** action on the recipe screen, with two formats.
+Both produce the same bytes on all four targets and both are saved through the platform's
+own "save as" flow (Android SAF, iOS Files picker, AWT dialog) or the browser's download —
+no permissions, no FileProvider for these two, nothing to install.
+
+**Markdown** (`domain/export/RecipeMarkdown.kt`) is a plain CommonMark document: `#` title,
+a meta list, `## Ingredients` as bullets, `## Method` as a numbered list, and a footer. It
+opens correctly in Obsidian, Notion, GitHub and VS Code, and markdown-special characters in
+a title are escaped so a recipe called `*Best* noodles` cannot corrupt the document.
+
+**PDF** (`infraestructure/pdf`) is written by hand — about 300 lines producing a PDF 1.4
+document with A4 pages, Helvetica base-14 fonts, word wrapping, hanging indents for numbered
+steps, automatic page breaks and a per-page footer (`Shared Recipes · <date>` / `Page n
+of m`). Text is therefore **selectable and searchable**, files are a few KB, and every
+platform emits identical output.
+
+Two deliberate choices there:
+
+- **The base-14 fonts are not embedded.** That is what keeps the files tiny, but it limits
+  the text to the WinAnsi (Latin-1) repertoire — Spanish, French, German and Portuguese all
+  fit; emoji and CJK characters are replaced by `?` rather than mangling the file.
+- **No PDF library.** The one Kotlin Multiplatform option (KmPDF 1.2.0) is compiled against
+  an older Skiko and dies on Compose 1.12 with `NoSuchMethodError: Image.encodeToData`, so
+  it was dropped after `RecipePdfTest` caught it. The hand-written writer has no dependency
+  to drift and its output is covered by tests (header, page objects, xref offsets, trailer,
+  and that every ingredient and step is really in the stream).
+
+Recipe PDFs are *not* shared through the Android share sheet (they would need a
+`FileProvider`); the user picks the destination once in the system save dialog, which is
+also the only flow that works unchanged on the other three targets.
+
+
 
 ## Security model
 
@@ -436,7 +536,16 @@ private-mode or quota failures fall back to "sign in again" instead of crashing.
 - Clients cannot change their own `role`: `update` on `profiles` is granted **per column**
   (`display_name` only), so the column is unwritable regardless of any policy.
 - The role is read from `profiles`, never from `raw_user_meta_data` (which users can edit).
-- `create_recipe` / `update_recipe` / `delete_recipe` / `restore_recipe` run as
+- `create_recipe` / `update_recipe` / `delete_recipe` / `restore_recipe` /
+  `admin_export_recipes` / `admin_restore_recipes` / `admin_clear_recipes` run as
   `SECURITY INVOKER`, so RLS still applies to the caller; a non-admin calling them
-  directly is rejected by the policies on `recipes` (for the two `update`-based ones
-  the call simply touches zero rows, i.e. the recipe stays in place and stays visible).
+  directly is rejected by the policies on `recipes` (for the `update`-based ones the
+  call simply touches zero rows, i.e. the recipe stays in place and stays visible).
+- `admin_import_recipes` is the single `SECURITY DEFINER` write path, and it earns the
+  exception: restoring a backup has to clear `deleted_at`, put back `created_at` and
+  re-attach comments other users wrote — none of which RLS would let an invoker do (the
+  comment insert policy requires `author_id = auth.uid()`). Its **first statement** is
+  `if not public.is_admin() then raise exception … using errcode = '42501'`, and it pins
+  `search_path = ''` like every other helper, so the elevation is gated by exactly the
+  same rule the policies use. It is only reachable by `authenticated` (`anon` and `public`
+  are revoked, as in migrations 5, 6 and 8).

@@ -78,6 +78,12 @@ kotlin {
             implementation(libs.coil.compose)
             implementation(libs.kotlinx.datetime)
 
+            // Open/save dialogs for the admin JSON backup and the per-recipe export.
+            // The PDF itself is written by hand in infraestructure/pdf: the KMP PDF library
+            // tried (KmPDF 1.2.0) is built against an older Skiko and crashes on Compose 1.12
+            // with NoSuchMethodError, so it is not a dependency.
+            implementation(libs.filekit.dialogs)
+
             // Remember-me preferences and the legacy plaintext session lookup.
             implementation(libs.multiplatform.settings)
             implementation(libs.multiplatform.settings.noarg)
@@ -134,7 +140,13 @@ compose.desktop {
             // dead weight inside the jar.
             macOS { iconFile.set(project.file("icons/app-icon.icns")) }
             windows { iconFile.set(project.file("icons/app-icon.ico")) }
-            linux { iconFile.set(project.file("icons/app-icon.png")) }
+            linux {
+                iconFile.set(project.file("icons/app-icon.png"))
+                // FileKit's dialogs are what the backup/export flows use. A packaged Linux
+                // build without this module fails with NoClassDefFoundError the first time a
+                // dialog opens (the JDK strips jdk.security.auth from jlink images by default).
+                modules("jdk.security.auth")
+            }
         }
     }
 }

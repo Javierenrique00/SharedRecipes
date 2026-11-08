@@ -7,6 +7,10 @@ androidx-activity = "1.11.0"
 androidx-lifecycle = "2.11.0"
 coil = "3.6.3"
 composeMultiplatform = "1.12.2"
+# Native open/save dialogs on every target (Android SAF, iOS document picker, AWT/Swing,
+# browser download). `filekit-dialogs` bundles filekit-core and pulls in no Compose
+# dependencies, which is what lets the view models drive the dialogs directly.
+filekit = "0.17.0"
 kotlin = "2.4.21"        # minimum for supabase-kt 3.9.0 (compiled with 2.4.21)
 # Browser target (wasmJs): window/document/localStorage. Compose ui already pulls it in
 # transitively; declared explicitly so the web store can import it directly.
@@ -54,6 +58,9 @@ supabase-postgrest = { module = "io.github.jan-tennert.supabase:postgrest-kt" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 coil-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version.ref = "coil" }
 coil-ktor = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
+
+# File dialogs (open/save) shared by the recipe backup and the PDF/Markdown export.
+filekit-dialogs = { module = "io.github.vinceglb:filekit-dialogs", version.ref = "filekit" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

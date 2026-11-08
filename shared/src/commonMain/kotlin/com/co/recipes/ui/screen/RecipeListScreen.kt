@@ -34,12 +34,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.navigation.NavHostController
 import com.co.recipes.domain.dataclass.Recipe
 import com.co.recipes.domain.dataclass.UserSession
 import com.co.recipes.domain.viewmodel.RecipeListViewModel
 import com.co.recipes.ui.common.EmptyState
 import com.co.recipes.ui.common.ErrorState
+import com.co.recipes.ui.navigation.AdminRecipes
 import com.co.recipes.ui.navigation.RecipeDetail
 import com.co.recipes.ui.navigation.RecipeEditor
 
@@ -51,7 +53,13 @@ fun RecipeListScreen(
     session: UserSession,
     onSignOut: () -> Unit,
 ) {
-    LaunchedEffect(Unit) { viewModel.refresh() }
+    // Refresh whenever the screen is resumed, not just on first composition: coming back
+    // from the admin console (or from the editor) must never show stale recipes — that is
+    // what makes a clear/restore visibly take effect.
+    LifecycleResumeEffect(Unit) {
+        viewModel.refresh()
+        onPauseOrDispose { }
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val recipes = viewModel.recipes
@@ -96,6 +104,13 @@ fun RecipeListScreen(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    // Admins get the backup/restore/clear console. Clients never see the
+                    // entry point; the calls behind it are admin-checked in Postgres anyway.
+                    if (session.isAdmin) {
+                        TextButton(onClick = { navController.navigate(AdminRecipes) }) {
+                            Text("Admin")
+                        }
+                    }
                     TextButton(onClick = onSignOut) { Text("Sign out") }
                 },
             )

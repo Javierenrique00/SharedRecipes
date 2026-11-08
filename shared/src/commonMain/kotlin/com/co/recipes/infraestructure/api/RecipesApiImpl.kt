@@ -1,7 +1,10 @@
 package com.co.recipes.infraestructure.api
 
 import com.co.recipes.infraestructure.dataclass.CreateRecipeParams
+import com.co.recipes.infraestructure.dataclass.ImportSummary
 import com.co.recipes.infraestructure.dataclass.NewCommentDto
+import com.co.recipes.infraestructure.dataclass.RecipeBackupDto
+import com.co.recipes.infraestructure.dataclass.RecipeBackupJson
 import com.co.recipes.infraestructure.dataclass.RecipeDto
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
@@ -12,7 +15,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 class RecipesApiImpl(private val client: SupabaseClient) : RecipesApi {
 
@@ -81,6 +86,36 @@ class RecipesApiImpl(private val client: SupabaseClient) : RecipesApi {
             filter { eq("id", commentId) }
         }
         Unit
+    }
+
+    override suspend fun exportRecipes(): Result<List<RecipeBackupDto>> = apiCall {
+        // The function returns one jsonb array, so this is a single round trip for the
+        // whole collection (children and comments included).
+        client.postgrest.rpc("admin_export_recipes").decodeList<RecipeBackupDto>()
+    }
+
+    override suspend fun importRecipes(recipes: List<RecipeBackupDto>): Result<ImportSummary> =
+        apiCall {
+            val payload = buildJsonObject {
+                put("p_recipes", RecipeBackupJson.encodeToJsonElement(recipes))
+            }
+            client.postgrest.rpc("admin_import_recipes", payload).decodeAs<ImportSummary>()
+        }
+
+    override suspend fun restoreRecipes(ids: List<String>): Result<Int> = apiCall {
+        if (ids.isEmpty()) {
+            0
+        } else {
+            val payload = buildJsonObject {
+                putJsonArray("p_ids") { ids.forEach { id -> add(id) } }
+            }
+            client.postgrest.rpc("admin_restore_recipes", payload).decodeAs<Int>()
+        }
+    }
+
+    override suspend fun clearRecipes(hard: Boolean): Result<Int> = apiCall {
+        val payload = buildJsonObject { put("p_hard", hard) }
+        client.postgrest.rpc("admin_clear_recipes", payload).decodeAs<Int>()
     }
 
     private fun CreateRecipeParams.toRpcJson(): JsonObject = buildJsonObject {
