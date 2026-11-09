@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.co.recipes.domain.dataclass.Recipe
+import com.co.recipes.domain.dataclass.filterBySearch
 import com.co.recipes.domain.dataclass.toDomain
 import com.co.recipes.infraestructure.api.RecipesApi
 import com.co.recipes.infraestructure.api.readableMessage
@@ -21,6 +22,19 @@ class RecipeListViewModel(private val recipesApi: RecipesApi) : ViewModel() {
 
     var errorMessage by mutableStateOf<String?>(null)
         private set
+
+    /**
+     * What the user typed in the list's search box.
+     *
+     * The filter is client side, over the recipes [refresh] already loaded: matching a
+     * partial word is a `contains` in memory, so typing never fires a request and the
+     * results update on the keystroke. See [com.co.recipes.domain.dataclass.filterBySearch].
+     */
+    var searchQuery by mutableStateOf("")
+        private set
+
+    /** What the list renders: [recipes] narrowed by [searchQuery]. */
+    val visibleRecipes: List<Recipe> get() = recipes.filterBySearch(searchQuery)
 
     /**
      * The recipe that was just deleted, kept only so the screen can offer Undo.
@@ -47,7 +61,18 @@ class RecipeListViewModel(private val recipesApi: RecipesApi) : ViewModel() {
         }
     }
 
+    fun onSearchQueryChange(value: String) {
+        searchQuery = value
+    }
+
+    /** Drops the filter; the list shows everything [refresh] loaded again. */
+    fun clearSearch() {
+        searchQuery = ""
+    }
+
     fun delete(recipe: Recipe) {
+        // Indexed in [recipes], never in [visibleRecipes]: a search may be hiding the
+        // neighbours, and Undo still has to put the card back at its place in the full list.
         val index = recipes.indexOfFirst { it.id == recipe.id }
         if (index < 0) return
 

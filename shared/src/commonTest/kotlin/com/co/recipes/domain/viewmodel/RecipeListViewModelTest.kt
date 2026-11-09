@@ -197,4 +197,91 @@ class RecipeListViewModelTest {
             Dispatchers.resetMain()
         }
     }
+
+    @Test
+    fun theSearchNarrowsTheCardsWithoutDroppingTheLoadedRecipes() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val api = RecordingRecipesApi(
+                listOf(
+                    recipeDto("1", "Chicken curry"),
+                    recipeDto("2", "Pad Thai"),
+                    recipeDto("3", "Chicken soup"),
+                ),
+            )
+            val viewModel = RecipeListViewModel(api)
+            viewModel.refresh()
+            advanceUntilIdle()
+
+            viewModel.onSearchQueryChange("chic")
+
+            assertEquals(listOf("1", "3"), viewModel.visibleRecipes.map { it.id })
+            assertEquals(
+                3,
+                viewModel.recipes.size,
+                "the filter is a view: the loaded collection must stay complete, or Undo " +
+                    "would have nothing to restore into",
+            )
+            assertEquals("chic", viewModel.searchQuery)
+            assertNull(viewModel.errorMessage)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun clearingTheSearchShowsEverythingAgain() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val api = RecordingRecipesApi(
+                listOf(recipeDto("1", "Chicken curry"), recipeDto("2", "Pad Thai")),
+            )
+            val viewModel = RecipeListViewModel(api)
+            viewModel.refresh()
+            advanceUntilIdle()
+
+            viewModel.onSearchQueryChange("thai")
+            assertEquals(listOf("2"), viewModel.visibleRecipes.map { it.id })
+
+            viewModel.clearSearch()
+
+            assertEquals("", viewModel.searchQuery)
+            assertEquals(listOf("1", "2"), viewModel.visibleRecipes.map { it.id })
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun undoPutsTheCardBackInPlaceWhileTheSearchIsActive() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val api = RecordingRecipesApi(
+                listOf(
+                    recipeDto("1", "Chicken curry"),
+                    recipeDto("2", "Pad Thai"),
+                    recipeDto("3", "Chicken soup"),
+                ),
+            )
+            val viewModel = RecipeListViewModel(api)
+            viewModel.refresh()
+            advanceUntilIdle()
+            viewModel.onSearchQueryChange("chicken")
+
+            // "3" is the last visible card but the third recipe in the full list.
+            viewModel.delete(viewModel.visibleRecipes.last())
+            advanceUntilIdle()
+            assertEquals(listOf("1", "2"), viewModel.recipes.map { it.id })
+            assertEquals(listOf("1"), viewModel.visibleRecipes.map { it.id })
+
+            viewModel.undoDelete()
+            advanceUntilIdle()
+
+            assertEquals(listOf("1", "2", "3"), viewModel.recipes.map { it.id })
+            assertEquals(listOf("1", "3"), viewModel.visibleRecipes.map { it.id })
+            assertEquals(listOf("3"), api.restored)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
 }

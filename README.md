@@ -5,6 +5,7 @@ A shared recipe collection with two roles:
 | | Admin (`admin`) | Client (`client`) |
 |---|---|---|
 | Read recipes | ✅ | ✅ |
+| Search the list (partial words) | ✅ | ✅ |
 | Create / edit / delete recipes | ✅ | ❌ |
 | Read comments | ✅ | ✅ |
 | Comment | ✅ | ✅ (own comments only) |
@@ -480,6 +481,36 @@ build keeps the session in plaintext `localStorage` — the same trade-off as De
 with a real XSS surface because any script on the app's origin can read it. Nothing else is
 persisted (still no password), `localStorage` is per-origin, and every access is guarded so
 private-mode or quota failures fall back to "sign in again" instead of crashing.
+
+## Searching the list
+
+The recipe list has a **Search** field above the cards. The list narrows as you type — there
+is nothing to submit (`ImeAction.Search` just closes the keyboard) and the **×** clears the
+filter, bringing the whole collection back.
+
+Matching is a case-insensitive **substring**, so a *part* of a word is enough: `chic`, `ken`
+and `urry` all find "Chicken curry". Several words are an **AND** — every term has to appear
+somewhere in the recipe — so `chic curry` narrows and `chic beef` empties the list.
+
+| Searched | Not searched |
+|---|---|
+| Recipe **title** | **Step instructions** — detail-only columns (`RecipesApiImpl.SUMMARY_COLUMNS`), the list never loads them |
+| **Description** | **Comments** — the card only counts them |
+| **Ingredient names** | Quantities and units — the same field and ingredient matches regardless of how much |
+
+The rule lives in `domain/dataclass/RecipeSearch.kt` and runs **client side**, over the
+recipes the list already fetched: those three strings arrive with the single `listRecipes()`
+call, so a keystroke is a `contains` in memory — no request per character, no debounce and no
+new PostgREST filter, and it keeps working offline. The query is state in
+`RecipeListViewModel`, so it survives the resume-refresh (coming back from the editor or the
+admin console) and a trip into a recipe and back. The screen renders `visibleRecipes`; the
+complete `recipes` list stays untouched, which is what Delete/Undo index into — an undo while
+a filter is active puts the card back at its original position.
+
+The screen's body uses `Modifier.screenContentPadding(padding)` for the same reason the
+editor does: it now owns a text field, so the keyboard must not cover the results (see
+*Keyboard (IME) on Android*).
+
 ## Recipe administration (admin)
 
 The **Admin** action in the recipe list's top bar opens a console with four cards. It is

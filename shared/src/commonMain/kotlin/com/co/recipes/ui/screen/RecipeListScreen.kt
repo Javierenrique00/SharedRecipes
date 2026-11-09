@@ -13,12 +13,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -32,6 +34,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -41,6 +45,7 @@ import com.co.recipes.domain.dataclass.UserSession
 import com.co.recipes.domain.viewmodel.RecipeListViewModel
 import com.co.recipes.ui.common.EmptyState
 import com.co.recipes.ui.common.ErrorState
+import com.co.recipes.ui.common.screenContentPadding
 import com.co.recipes.ui.navigation.AdminRecipes
 import com.co.recipes.ui.navigation.RecipeDetail
 import com.co.recipes.ui.navigation.RecipeEditor
@@ -63,6 +68,9 @@ fun RecipeListScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val recipes = viewModel.recipes
+    // The cards on screen: `recipes` narrowed by the search box. Read as a snapshot value,
+    // so typing re-composes the list while the full collection stays in the ViewModel.
+    val visible = viewModel.visibleRecipes
     val error = viewModel.errorMessage
 
     // Undo. The delete is a soft delete server side, so "Undo" only clears a column
@@ -125,7 +133,10 @@ fun RecipeListScreen(
             }
         },
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+        // `screenContentPadding` (not `padding`) because this screen now owns a text field:
+        // it reserves the keyboard's height, so the results are not hidden behind the IME.
+        // See ui/common/Insets.kt and the README's IME section.
+        Box(modifier = Modifier.fillMaxSize().screenContentPadding(padding)) {
             when {
                 viewModel.isLoading && recipes.isEmpty() ->
                     CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -140,23 +151,76 @@ fun RecipeListScreen(
                 recipes.isEmpty() ->
                     EmptyState("No recipes yet.", Modifier.align(Alignment.Center))
 
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    items(recipes, key = { it.id }) { recipe ->
-                        RecipeCard(
-                            recipe = recipe,
-                            isAdmin = session.isAdmin,
-                            onClick = { navController.navigate(RecipeDetail(recipe.id)) },
-                            onDelete = { viewModel.delete(recipe) },
-                        )
+                else -> Column(modifier = Modifier.fillMaxSize()) {
+                    RecipeSearchField(
+                        query = viewModel.searchQuery,
+                        onQueryChange = viewModel::onSearchQueryChange,
+                        onClear = viewModel::clearSearch,
+                    )
+
+                    if (visible.isEmpty()) {
+                        Box(Modifier.fillMaxSize()) {
+                            EmptyState(
+                                message = "No recipes match “${viewModel.searchQuery.trim()}”.",
+                                modifier = Modifier.align(Alignment.Center),
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            items(visible, key = { it.id }) { recipe ->
+                                RecipeCard(
+                                    recipe = recipe,
+                                    isAdmin = session.isAdmin,
+                                    onClick = { navController.navigate(RecipeDetail(recipe.id)) },
+                                    onDelete = { viewModel.delete(recipe) },
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * The list filter. Matching happens in the ViewModel over the recipes already loaded, so
+ * there is no debounce and no request per keystroke: the cards narrow as the user types.
+ *
+ * `ImeAction.Search` closes the keyboard instead of inserting anything — the results are
+ * already on screen while typing, so there is nothing to submit.
+ */
+@Composable
+private fun RecipeSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClear: () -> Unit,
+) {
+    val focusManager = LocalFocusManager.current
+
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        label = { Text("Search") },
+        placeholder = { Text("Title, description or ingredient") },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+        trailingIcon = {
+            // Only when there is something to clear; the glyph is the one the editor rows
+            // use, which keeps the app on text buttons instead of an icon dependency.
+            if (query.isNotEmpty()) {
+                TextButton(onClick = onClear) { Text("×") }
+            }
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 4.dp),
+    )
 }
 
 @Composable
