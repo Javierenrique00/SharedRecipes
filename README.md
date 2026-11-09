@@ -498,6 +498,17 @@ somewhere in the recipe — so `chic curry` narrows and `chic beef` empties the 
 | **Description** | **Comments** — the card only counts them |
 | **Ingredient names** | Quantities and units — the same field and ingredient matches regardless of how much |
 
+While a word is being typed, a **menu under the field** offers the words the collection
+already uses. They come from the same three fields the match reads, so accepting a suggestion
+can never leave an empty list — and the pool is narrowed to the recipes the *earlier* terms
+already matched, which is why `beef cur` never offers a chicken ingredient. Prefix hits are
+listed first, then the words that merely contain what was typed (`urry` → `curry`), at most
+eight of them. Picking one completes only the **last** word and leaves a trailing space, so
+`chic cur` + `curry` becomes `chic curry ` and the next word can follow straight away. The
+menu stays closed on an empty field and between words, so it never covers the cards; it is a
+`PrimaryEditable` anchor (`ExposedDropdownMenuBox`) precisely so the keyboard stays up while
+it is open.
+
 The rule lives in `domain/dataclass/RecipeSearch.kt` and runs **client side**, over the
 recipes the list already fetched: those three strings arrive with the single `listRecipes()`
 call, so a keystroke is a `contains` in memory — no request per character, no debounce and no

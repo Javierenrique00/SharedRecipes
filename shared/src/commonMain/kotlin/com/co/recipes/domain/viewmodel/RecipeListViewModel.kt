@@ -6,7 +6,9 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.co.recipes.domain.dataclass.Recipe
+import com.co.recipes.domain.dataclass.completeSearchQuery
 import com.co.recipes.domain.dataclass.filterBySearch
+import com.co.recipes.domain.dataclass.searchSuggestions
 import com.co.recipes.domain.dataclass.toDomain
 import com.co.recipes.infraestructure.api.RecipesApi
 import com.co.recipes.infraestructure.api.readableMessage
@@ -35,6 +37,13 @@ class RecipeListViewModel(private val recipesApi: RecipesApi) : ViewModel() {
 
     /** What the list renders: [recipes] narrowed by [searchQuery]. */
     val visibleRecipes: List<Recipe> get() = recipes.filterBySearch(searchQuery)
+
+    /**
+     * Words the search box offers to complete the word being typed — the menu under the
+     * field. Empty between words and on an empty field, which is what closes the menu.
+     * See [com.co.recipes.domain.dataclass.searchSuggestions].
+     */
+    val searchSuggestions: List<String> get() = recipes.searchSuggestions(searchQuery)
 
     /**
      * The recipe that was just deleted, kept only so the screen can offer Undo.
@@ -68,6 +77,14 @@ class RecipeListViewModel(private val recipesApi: RecipesApi) : ViewModel() {
     /** Drops the filter; the list shows everything [refresh] loaded again. */
     fun clearSearch() {
         searchQuery = ""
+    }
+
+    /**
+     * Accepts a suggestion from the menu: the word being typed is replaced by [word] and the
+     * filter re-applies. The menu leaves a trailing space, so the next word can follow.
+     */
+    fun completeSearchWith(word: String) {
+        searchQuery = completeSearchQuery(searchQuery, word)
     }
 
     fun delete(recipe: Recipe) {

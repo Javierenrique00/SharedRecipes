@@ -284,4 +284,35 @@ class RecipeListViewModelTest {
             Dispatchers.resetMain()
         }
     }
+
+    @Test
+    fun theMenuOffersWordsFromTheLoadedRecipesAndCompletesThem() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val api = RecordingRecipesApi(
+                listOf(recipeDto("1", "Chicken curry"), recipeDto("2", "Pad Thai")),
+            )
+            val viewModel = RecipeListViewModel(api)
+            viewModel.refresh()
+            advanceUntilIdle()
+
+            viewModel.onSearchQueryChange("pa")
+            assertEquals(listOf("Pad"), viewModel.searchSuggestions)
+            assertEquals(listOf("2"), viewModel.visibleRecipes.map { it.id })
+
+            viewModel.completeSearchWith("Pad")
+
+            assertEquals("Pad ", viewModel.searchQuery, "the picked word leaves room for the next")
+            assertEquals(listOf("2"), viewModel.visibleRecipes.map { it.id })
+            assertTrue(
+                viewModel.searchSuggestions.isEmpty(),
+                "a finished word closes the menu; the next keystroke re-opens it",
+            )
+
+            viewModel.clearSearch()
+            assertTrue(viewModel.searchSuggestions.isEmpty(), "an empty field offers nothing")
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
 }

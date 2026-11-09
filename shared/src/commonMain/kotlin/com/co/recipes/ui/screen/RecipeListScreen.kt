@@ -17,7 +17,10 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -31,7 +34,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
@@ -154,7 +160,9 @@ fun RecipeListScreen(
                 else -> Column(modifier = Modifier.fillMaxSize()) {
                     RecipeSearchField(
                         query = viewModel.searchQuery,
+                        suggestions = viewModel.searchSuggestions,
                         onQueryChange = viewModel::onSearchQueryChange,
+                        onSuggestionClick = viewModel::completeSearchWith,
                         onClear = viewModel::clearSearch,
                     )
 
@@ -188,39 +196,76 @@ fun RecipeListScreen(
 }
 
 /**
- * The list filter. Matching happens in the ViewModel over the recipes already loaded, so
- * there is no debounce and no request per keystroke: the cards narrow as the user types.
+ * The list filter: a text field plus a menu of the words the collection already uses.
+ *
+ * Matching happens in the ViewModel over the recipes already loaded, so there is no debounce
+ * and no request per keystroke: the cards narrow as the user types, and the suggestions come
+ * from the same strings the filter reads (see [com.co.recipes.domain.dataclass.searchSuggestions]).
  *
  * `ImeAction.Search` closes the keyboard instead of inserting anything — the results are
  * already on screen while typing, so there is nothing to submit.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RecipeSearchField(
     query: String,
+    suggestions: List<String>,
     onQueryChange: (String) -> Unit,
+    onSuggestionClick: (String) -> Unit,
     onClear: () -> Unit,
 ) {
     val focusManager = LocalFocusManager.current
 
-    OutlinedTextField(
-        value = query,
-        onValueChange = onQueryChange,
-        label = { Text("Search") },
-        placeholder = { Text("Title, description or ingredient") },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-        trailingIcon = {
-            // Only when there is something to clear; the glyph is the one the editor rows
-            // use, which keeps the app on text buttons instead of an icon dependency.
-            if (query.isNotEmpty()) {
-                TextButton(onClick = onClear) { Text("×") }
-            }
-        },
+    // Two pieces of state, and the split is what makes the menu behave: `expanded` is the
+    // user's intent (they are in the field), `menuOpen` also requires something to offer.
+    // Picking a suggestion leaves a trailing space, so `suggestions` empties and the menu
+    // hides while `expanded` stays true — typing the next word re-opens it without the user
+    // having to tap the field again. It also means the menu never covers the cards on an
+    // empty field or between words.
+    var expanded by remember { mutableStateOf(false) }
+    val menuOpen = expanded && suggestions.isNotEmpty()
+
+    ExposedDropdownMenuBox(
+        expanded = menuOpen,
+        onExpandedChange = { expanded = it },
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 4.dp),
-    )
+    ) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            label = { Text("Search") },
+            placeholder = { Text("Title, description or ingredient") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+            trailingIcon = {
+                // Only when there is something to clear; the glyph is the one the editor rows
+                // use, which keeps the app on text buttons instead of an icon dependency.
+                if (query.isNotEmpty()) {
+                    TextButton(onClick = onClear) { Text("×") }
+                }
+            },
+            // `PrimaryEditable` (not the non-editable anchor) keeps the field focused and the
+            // IME up while the menu is open — the rule in the README's keyboard section.
+            modifier = Modifier
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
+                .fillMaxWidth(),
+        )
+
+        ExposedDropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { expanded = false },
+        ) {
+            suggestions.forEach { word ->
+                DropdownMenuItem(
+                    text = { Text(word) },
+                    onClick = { onSuggestionClick(word) },
+                )
+            }
+        }
+    }
 }
 
 @Composable
