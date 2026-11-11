@@ -282,58 +282,73 @@ private fun RecipeCard(
     onDelete: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            RecipeThumbnail(recipe)
+        Column(Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                RecipeThumbnail(recipe)
 
-            Column(Modifier.weight(1f)) {
-                Text(recipe.title, style = MaterialTheme.typography.titleMedium)
+                Column(Modifier.weight(1f)) {
+                    Text(recipe.title, style = MaterialTheme.typography.titleMedium)
 
-                recipe.description?.takeIf { it.isNotBlank() }?.let { description ->
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
-                Spacer(Modifier.height(10.dp))
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    recipe.totalMinutes?.let {
-                        Text("$it min", style = MaterialTheme.typography.labelSmall)
-                    }
-                    Text(
-                        "${recipe.ingredients.size} ingredients",
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                    Text(
-                        "${recipe.comments.size} comments",
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                    if (recipe.youtubeId != null) {
-                        Text("video", style = MaterialTheme.typography.labelSmall)
+                    recipe.description?.takeIf { it.isNotBlank() }?.let { description ->
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
+            }
 
-                if (isAdmin) {
-                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                        TextButton(onClick = onDelete) { Text("Delete") }
-                    }
+            Spacer(Modifier.height(10.dp))
+
+            RecipeFacts(recipe)
+
+            if (isAdmin) {
+                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = onDelete) { Text("Delete") }
                 }
             }
         }
     }
 }
+
+/**
+ * Time, ingredient count, comment count and the video marker.
+ *
+ * One `Text` on its own full-width line instead of four siblings in a `Row`: the facts used
+ * to overflow the text column next to the thumbnail (Kotlin/Compose does not shrink texts
+ * automatically, so the last one was simply cut off). As a single ellipsized line the card
+ * uses the whole width it has, and on a narrow phone with a big recipe it ends in "…"
+ * instead of running off the card.
+ */
+@Composable
+private fun RecipeFacts(recipe: Recipe) {
+    val facts = buildList {
+        recipe.totalMinutes?.let { add("$it min") }
+        add(countLabel(recipe.ingredients.size, "ingredient"))
+        add(countLabel(recipe.comments.size, "comment"))
+        if (recipe.youtubeId != null) add("video")
+    }
+
+    Text(
+        text = facts.joinToString("  ·  "),
+        style = MaterialTheme.typography.labelSmall,
+        modifier = Modifier.fillMaxWidth(),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+/** `1 ingredient`, `4 ingredients`. */
+private fun countLabel(count: Int, singular: String): String =
+    "$count $singular${if (count == 1) "" else "s"}"
 
 /**
  * The card's picture: the recipe's own photo, or its YouTube still when it has no upload

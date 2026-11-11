@@ -4,11 +4,11 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * The list card renders its counts from the loaded recipe
- * (`"${recipe.ingredients.size} ingredients"` in `RecipeListScreen`), but `RecipeDto`
- * decodes a child that was *not* selected into `emptyList()`. A summary projection that
- * forgets to embed the children therefore fails silently — every card reads
- * "0 ingredients" — which is exactly what happened before these tests existed.
+ * The list card renders its counts from the loaded recipe (the facts line in
+ * `RecipeListScreen`), but `RecipeDto` decodes a child that was *not* selected into
+ * `emptyList()`. A summary projection that forgets to embed the children therefore fails
+ * silently — every card reads "0 ingredients" — which is exactly what happened before these
+ * tests existed.
  */
 class RecipeColumnsTest {
 
