@@ -56,4 +56,18 @@ interface RecipesApi {
      * Returns how many recipes were affected.
      */
     suspend fun clearRecipes(hard: Boolean): Result<Int>
+
+    /**
+     * Permanently deletes the recipes that are already soft-deleted (the trash), cascading
+     * to their ingredients, steps and comments. Returns how many rows went away.
+     */
+    suspend fun purgeDeletedRecipes(): Result<Int>
+
+    /**
+     * Every storage path any recipe still references, soft-deleted ones included.
+     *
+     * The admin maintenance sweep compares this with what is actually in the bucket to
+     * find objects nothing points at. It never deletes anything by itself.
+     */
+    suspend fun adminRecipeImagePaths(): Result<List<String>>
 }

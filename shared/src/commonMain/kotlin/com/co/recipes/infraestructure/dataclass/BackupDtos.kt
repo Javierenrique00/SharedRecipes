@@ -30,7 +30,7 @@ data class RecipeBackupFile(
 )
 
 /** Bumped only when the shape below changes in a way older code cannot read. */
-const val RECIPE_BACKUP_FORMAT_VERSION: Int = 1
+const val RECIPE_BACKUP_FORMAT_VERSION: Int = 2
 
 @Serializable
 data class RecipeBackupDto(
@@ -39,6 +39,8 @@ data class RecipeBackupDto(
     val title: String,
     val description: String? = null,
     @SerialName("youtube_url") val youtubeUrl: String? = null,
+    /** Storage object path of the cover photo; the bytes live in the `.zip` beside the JSON. */
+    @SerialName("image_path") val imagePath: String? = null,
     val servings: Int? = null,
     @SerialName("prep_minutes") val prepMinutes: Int? = null,
     @SerialName("cook_minutes") val cookMinutes: Int? = null,
@@ -56,6 +58,17 @@ data class RecipeBackupDto(
     val comments: List<RecipeBackupCommentDto> = emptyList(),
 ) {
     val isDeleted: Boolean get() = deletedAt != null
+
+    /**
+     * Every storage path this recipe references, including its steps.
+     *
+     * The backup archive downloads exactly these objects; the importer uploads the ones
+     * belonging to the recipes the admin ticked.
+     */
+    fun imagePaths(): List<String> = buildList {
+        imagePath?.takeIf { it.isNotBlank() }?.let(::add)
+        steps.forEach { step -> step.imagePath?.takeIf { it.isNotBlank() }?.let(::add) }
+    }
 }
 
 @Serializable
@@ -70,6 +83,7 @@ data class RecipeBackupIngredientDto(
 data class RecipeBackupStepDto(
     @SerialName("step_number") val stepNumber: Int,
     val instruction: String,
+    @SerialName("image_path") val imagePath: String? = null,
 )
 
 @Serializable

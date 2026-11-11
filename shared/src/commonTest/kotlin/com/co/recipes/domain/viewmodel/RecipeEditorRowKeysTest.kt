@@ -5,6 +5,7 @@ import com.co.recipes.infraestructure.dataclass.CreateRecipeParams
 import com.co.recipes.infraestructure.dataclass.ImportSummary
 import com.co.recipes.infraestructure.dataclass.RecipeBackupDto
 import com.co.recipes.infraestructure.dataclass.RecipeDto
+import com.co.recipes.testutil.FakeRecipeImageStore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -41,6 +42,12 @@ private class NoopRecipesApi : RecipesApi {
 
     override suspend fun clearRecipes(hard: Boolean): Result<Int> =
         Result.failure(NotImplementedError())
+
+    override suspend fun purgeDeletedRecipes(): Result<Int> =
+        Result.failure(NotImplementedError())
+
+    override suspend fun adminRecipeImagePaths(): Result<List<String>> =
+        Result.failure(NotImplementedError())
 }
 
 /**
@@ -62,7 +69,7 @@ class RecipeEditorRowKeysTest {
 
     @Test
     fun addedRowsStayUniqueAcrossBothLists() {
-        val viewModel = RecipeEditorViewModel(NoopRecipesApi())
+        val viewModel = RecipeEditorViewModel(NoopRecipesApi(), FakeRecipeImageStore())
 
         repeat(3) { viewModel.addIngredientRow() }
         repeat(3) { viewModel.addStepRow() }
@@ -74,7 +81,7 @@ class RecipeEditorRowKeysTest {
 
     @Test
     fun keysStayUniqueAfterRemovingRows() {
-        val viewModel = RecipeEditorViewModel(NoopRecipesApi())
+        val viewModel = RecipeEditorViewModel(NoopRecipesApi(), FakeRecipeImageStore())
         repeat(2) { viewModel.addIngredientRow() }
         repeat(2) { viewModel.addStepRow() }
 

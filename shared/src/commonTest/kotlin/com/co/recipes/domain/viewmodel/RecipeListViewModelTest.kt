@@ -68,6 +68,12 @@ private class RecordingRecipesApi(
 
     override suspend fun clearRecipes(hard: Boolean): Result<Int> =
         Result.failure(NotImplementedError())
+
+    override suspend fun purgeDeletedRecipes(): Result<Int> =
+        Result.failure(NotImplementedError())
+
+    override suspend fun adminRecipeImagePaths(): Result<List<String>> =
+        Result.failure(NotImplementedError())
 }
 
 private fun recipeDto(id: String, title: String) = RecipeDto(id = id, title = title)

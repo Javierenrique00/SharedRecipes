@@ -118,6 +118,14 @@ class RecipesApiImpl(private val client: SupabaseClient) : RecipesApi {
         client.postgrest.rpc("admin_clear_recipes", payload).decodeAs<Int>()
     }
 
+    override suspend fun purgeDeletedRecipes(): Result<Int> = apiCall {
+        client.postgrest.rpc("admin_purge_deleted_recipes", buildJsonObject { }).decodeAs<Int>()
+    }
+
+    override suspend fun adminRecipeImagePaths(): Result<List<String>> = apiCall {
+        client.postgrest.rpc("admin_recipe_image_paths", buildJsonObject { }).decodeAs<List<String>>()
+    }
+
     private fun CreateRecipeParams.toRpcJson(): JsonObject = buildJsonObject {
         put("p_title", title)
         put("p_description", description)
@@ -125,6 +133,7 @@ class RecipesApiImpl(private val client: SupabaseClient) : RecipesApi {
         put("p_servings", servings)
         put("p_prep_minutes", prepMinutes)
         put("p_cook_minutes", cookMinutes)
+        put("p_image_path", imagePath)
         put(
             "p_ingredients",
             buildJsonArray {
@@ -148,6 +157,7 @@ class RecipesApiImpl(private val client: SupabaseClient) : RecipesApi {
                         buildJsonObject {
                             put("step_number", step.stepNumber)
                             put("instruction", step.instruction)
+                            put("image_path", step.imagePath)
                         }
                     )
                 }
@@ -160,12 +170,12 @@ class RecipesApiImpl(private val client: SupabaseClient) : RecipesApi {
     // card instead of failing.
     internal companion object {
         const val COMMON_COLUMNS =
-            "id,title,description,youtube_url,youtube_id,servings,prep_minutes,cook_minutes," +
-                "created_at"
+            "id,title,description,youtube_url,youtube_id,image_path,servings,prep_minutes," +
+                "cook_minutes,created_at"
 
         // Child ordering is not guaranteed by PostgREST, so the mapper sorts.
         const val INGREDIENT_COLUMNS = "recipe_ingredients(id,position,quantity,unit,name)"
-        const val STEP_COLUMNS = "recipe_steps(id,step_number,instruction)"
+        const val STEP_COLUMNS = "recipe_steps(id,step_number,instruction,image_path)"
         const val COMMENT_COLUMNS = "recipe_comments(id,recipe_id,author_id,body,created_at)"
 
         // The list card renders "${recipe.ingredients.size} ingredients" and

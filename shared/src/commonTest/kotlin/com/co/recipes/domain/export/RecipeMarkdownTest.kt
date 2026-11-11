@@ -117,4 +117,45 @@ class RecipeMarkdownTest {
 
         assertTrue(markdown.contains("1. First line.\n   Second line."), markdown)
     }
+
+    @Test
+    fun photosAreLinkedRelativeToTheExportedArchive() {
+        val withPhotos = recipe(
+            steps = listOf(Step(number = 1, instruction = "Soak.", imagePath = "steps/one.jpg")),
+        ).copy(imagePath = "recipes/cover.jpg")
+
+        val markdown = withPhotos.toMarkdown(
+            exportedAt = "2026-11-08 09:41",
+            imageFileNames = recipeImageFileNames(withPhotos),
+        )
+
+        assertTrue(markdown.contains("![Pad Thai](images/cover.jpg)"), markdown)
+        assertTrue(markdown.contains("![Step 1](images/step-1.jpg)"), markdown)
+    }
+
+    @Test
+    fun aRecipeWithoutPhotosHasNoImageLinks() {
+        val markdown = recipe().toMarkdown("2026-11-08 09:41", recipeImageFileNames(recipe()))
+
+        assertFalse(markdown.contains("!["), markdown)
+    }
+
+    @Test
+    fun imageFileNamesAreDeterministicAndStepOrdered() {
+        val withPhotos = recipe(
+            steps = listOf(
+                Step(number = 2, instruction = "Second.", imagePath = "steps/two.jpg"),
+                Step(number = 1, instruction = "First.", imagePath = "steps/one.jpg"),
+            ),
+        ).copy(imagePath = "recipes/cover.jpg")
+
+        assertEquals(
+            mapOf(
+                "recipes/cover.jpg" to "images/cover.jpg",
+                "steps/one.jpg" to "images/step-1.jpg",
+                "steps/two.jpg" to "images/step-2.jpg",
+            ),
+            recipeImageFileNames(withPhotos),
+        )
+    }
 }

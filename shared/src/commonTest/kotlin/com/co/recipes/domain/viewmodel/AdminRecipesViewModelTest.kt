@@ -1,10 +1,14 @@
 package com.co.recipes.domain.viewmodel
 
+import com.co.recipes.domain.backup.RecipeBackupArchive
 import com.co.recipes.domain.backup.RecipeBackupCodec
 import com.co.recipes.infraestructure.dataclass.ImportSummary
 import com.co.recipes.infraestructure.dataclass.RecipeBackupDto
+import com.co.recipes.infraestructure.dataclass.RecipeBackupStepDto
 import com.co.recipes.infraestructure.files.SaveResult
+import com.co.recipes.infraestructure.storage.StoredImage
 import com.co.recipes.testutil.FakeDocumentFiles
+import com.co.recipes.testutil.FakeRecipeImageStore
 import com.co.recipes.testutil.FakeRecipesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -44,7 +48,7 @@ class AdminRecipesViewModelTest {
     fun loadingSplitsActiveFromDeleted() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
-            val viewModel = AdminRecipesViewModel(backend(active, deleted))
+            val viewModel = AdminRecipesViewModel(backend(active, deleted), FakeRecipeImageStore())
             viewModel.load()
             advanceUntilIdle()
 
@@ -65,6 +69,7 @@ class AdminRecipesViewModelTest {
             val files = FakeDocumentFiles()
             val viewModel = AdminRecipesViewModel(
                 recipesApi = api,
+                images = FakeRecipeImageStore(),
                 dateProvider = { "2026-11-08" },
                 timestampProvider = { "2026-11-08T09:41:12Z" },
                 files = files,
@@ -100,6 +105,7 @@ class AdminRecipesViewModelTest {
 
             val viewModel = AdminRecipesViewModel(
                 recipesApi = backend(active),
+                images = FakeRecipeImageStore(),
                 files = FakeDocumentFiles(fileToOpen = backupText, openedName = "my-backup.json"),
             )
             viewModel.load()
@@ -128,6 +134,7 @@ class AdminRecipesViewModelTest {
             val api = backend(active)
             val viewModel = AdminRecipesViewModel(
                 recipesApi = api,
+                images = FakeRecipeImageStore(),
                 files = FakeDocumentFiles(fileToOpen = backupText),
             )
             viewModel.load()
@@ -152,7 +159,7 @@ class AdminRecipesViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
             val api = FakeRecipesApi(backup = listOf(active, deleted), restoreCount = 1)
-            val viewModel = AdminRecipesViewModel(recipesApi = api)
+            val viewModel = AdminRecipesViewModel(recipesApi = api, images = FakeRecipeImageStore())
             viewModel.load()
             advanceUntilIdle()
 
@@ -171,7 +178,7 @@ class AdminRecipesViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
             val api = FakeRecipesApi(backup = listOf(active), clearCount = 1)
-            val viewModel = AdminRecipesViewModel(recipesApi = api)
+            val viewModel = AdminRecipesViewModel(recipesApi = api, images = FakeRecipeImageStore())
 
             viewModel.clear(AdminRecipesViewModel.ClearMode.SOFT)
             advanceUntilIdle()
@@ -194,6 +201,7 @@ class AdminRecipesViewModelTest {
         try {
             val viewModel = AdminRecipesViewModel(
                 recipesApi = backend(active),
+                images = FakeRecipeImageStore(),
                 files = FakeDocumentFiles(fileToOpen = "<html>not json</html>"),
             )
 
@@ -216,6 +224,7 @@ class AdminRecipesViewModelTest {
         try {
             val viewModel = AdminRecipesViewModel(
                 recipesApi = backend(active),
+                images = FakeRecipeImageStore(),
                 files = FakeDocumentFiles(fileToOpen = null),
             )
 
@@ -235,6 +244,7 @@ class AdminRecipesViewModelTest {
         try {
             val viewModel = AdminRecipesViewModel(
                 recipesApi = backend(active),
+                images = FakeRecipeImageStore(),
                 files = FakeDocumentFiles(saveResult = SaveResult.Failed("disk full")),
             )
 
@@ -253,5 +263,191 @@ class AdminRecipesViewModelTest {
         val summary = ImportSummary(inserted = 2, updated = 1, restored = 3, skipped = 4)
         assertEquals("2 added, 1 updated, 3 restored, 4 skipped", summary.describe())
         assertEquals(6, summary.total)
+    }
+
+    @Test
+    fun exportingWithPhotosWritesAZipThatCarriesThem() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val photo = byteArrayOf(1, 2, 3)
+            val withPhotos = active.copy(
+                imagePath = "recipes/a.jpg",
+                steps = listOf(RecipeBackupStepDto(1, "Stir.", "steps/b.jpg")),
+            )
+            val files = FakeDocumentFiles()
+            val images = FakeRecipeImageStore(
+                mapOf("recipes/a.jpg" to photo, "steps/b.jpg" to photo),
+            )
+            val viewModel = AdminRecipesViewModel(
+                recipesApi = FakeRecipesApi(backup = listOf(withPhotos)),
+                images = images,
+                dateProvider = { "2026-11-11" },
+                timestampProvider = { "2026-11-11T10:00:00Z" },
+                files = files,
+            )
+
+            viewModel.exportAll()
+            advanceUntilIdle()
+
+            assertEquals("recipes-backup-2026-11-11.zip", files.savedFileName)
+            val content = RecipeBackupArchive.decode(files.savedBytes!!).getOrThrow()
+            assertEquals(setOf("recipes/a.jpg", "steps/b.jpg"), content.images.keys)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun restoringAZipReuploadsItsPhotosToTheRecordedPaths() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val photo = byteArrayOf(9, 9)
+            val incoming = RecipeBackupDto(
+                id = "66666666-6666-6666-6666-666666666666",
+                title = "Ramen",
+                imagePath = "recipes/r.jpg",
+            )
+            val archive = RecipeBackupArchive.encode(
+                manifestJson = RecipeBackupCodec.encode(
+                    listOf(incoming),
+                    exportedAt = "2026-11-11T10:00:00Z",
+                ),
+                images = mapOf("recipes/r.jpg" to photo),
+            )
+
+            val images = FakeRecipeImageStore()
+            val viewModel = AdminRecipesViewModel(
+                recipesApi = FakeRecipesApi(backup = emptyList()),
+                images = images,
+                files = FakeDocumentFiles(zipToOpen = archive, openedName = "backup.zip"),
+            )
+
+            viewModel.pickBackupFile()
+            advanceUntilIdle()
+            assertNotNull(viewModel.importPreview, "a zip backup must be readable")
+
+            viewModel.restoreImported()
+            advanceUntilIdle()
+
+            assertEquals(listOf("recipes/r.jpg"), images.restoredPaths)
+            assertTrue(
+                viewModel.statusMessage.orEmpty().contains("1 photos"),
+                viewModel.statusMessage,
+            )
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun scanningFindsPhotosNoRecipeReferences() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val images = FakeRecipeImageStore(
+                mapOf(
+                    "recipes/used.jpg" to byteArrayOf(1),
+                    "recipes/orphan.jpg" to byteArrayOf(1, 2),
+                    "steps/orphan.jpg" to byteArrayOf(1, 2, 3),
+                ),
+            )
+            val api = FakeRecipesApi().apply { imagePaths = listOf("recipes/used.jpg") }
+            val viewModel = AdminRecipesViewModel(
+                recipesApi = api,
+                images = images,
+                nowProvider = { 10_000_000L },
+            )
+
+            viewModel.scanOrphanImages()
+            advanceUntilIdle()
+
+            val scan = assertNotNull(viewModel.orphanScan)
+            assertEquals(setOf("recipes/orphan.jpg", "steps/orphan.jpg"), scan.paths.toSet())
+            assertEquals(5, scan.totalBytes)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun deletingOrphansRechecksTheReferencesFirst() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val images = FakeRecipeImageStore(
+                mapOf(
+                    "recipes/a.jpg" to byteArrayOf(1),
+                    "recipes/b.jpg" to byteArrayOf(2),
+                ),
+            )
+            val api = FakeRecipesApi().apply { imagePaths = emptyList() }
+            val viewModel = AdminRecipesViewModel(
+                recipesApi = api,
+                images = images,
+                nowProvider = { 10_000_000L },
+            )
+
+            viewModel.scanOrphanImages()
+            advanceUntilIdle()
+            assertEquals(2, viewModel.orphanScan?.count)
+
+            // A recipe started using a.jpg after the scan: the delete must spare it.
+            api.imagePaths = listOf("recipes/a.jpg")
+            viewModel.deleteOrphanImages()
+            advanceUntilIdle()
+
+            assertEquals(listOf("recipes/b.jpg"), images.removedPaths)
+            assertNull(viewModel.orphanScan, "the scan is cleared once it has been applied")
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun aFreshUploadIsNotSwept() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val now = 5_000_000L
+            val images = FakeRecipeImageStore()
+            images.stored += StoredImage("recipes/fresh.jpg", 10, now - 1_000)
+            images.stored += StoredImage("recipes/old.jpg", 10, now - 2 * 60 * 60 * 1000)
+
+            val viewModel = AdminRecipesViewModel(
+                recipesApi = FakeRecipesApi(),
+                images = images,
+                nowProvider = { now },
+            )
+
+            viewModel.scanOrphanImages()
+            advanceUntilIdle()
+
+            assertEquals(listOf("recipes/old.jpg"), viewModel.orphanScan?.paths)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun purgingTheTrashDeletesItsPhotos() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val api = FakeRecipesApi(
+                backup = listOf(active, deleted.copy(imagePath = "recipes/dead.jpg")),
+            ).apply { purgeCount = 1 }
+            val images = FakeRecipeImageStore(mapOf("recipes/dead.jpg" to byteArrayOf(1)))
+            val viewModel = AdminRecipesViewModel(recipesApi = api, images = images)
+
+            viewModel.load()
+            advanceUntilIdle()
+            viewModel.purgeDeletedRecipes()
+            advanceUntilIdle()
+
+            assertEquals(1, api.purgeCalls)
+            assertEquals(listOf("recipes/dead.jpg"), images.removedPaths)
+            assertTrue(
+                viewModel.statusMessage.orEmpty().contains("1 deleted recipes"),
+                viewModel.statusMessage,
+            )
+        } finally {
+            Dispatchers.resetMain()
+        }
     }
 }

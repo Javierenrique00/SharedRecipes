@@ -34,8 +34,8 @@ import androidx.navigation.NavHostController
 import com.co.recipes.domain.viewmodel.AdminRecipesViewModel
 
 /**
- * Admin console: backup the whole collection to a file, restore some or all of it, and
- * clear it (soft by default) so a subset can be restored.
+ * Admin console: back the whole collection up to a file, restore some or all of it, empty
+ * the trash, sweep photos no recipe uses any more, and clear everything (soft by default).
  *
  * Reached from the list screen's "Admin" action; every mutation behind it is checked by
  * `public.is_admin()` in Postgres, so hiding the button is convenience, not security.
@@ -50,6 +50,8 @@ fun AdminRecipesScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showClearDialog by remember { mutableStateOf(false) }
+    var showPurgeDialog by remember { mutableStateOf(false) }
+    var showOrphanDialog by remember { mutableStateOf(false) }
     var selectedDeletedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     val status = viewModel.statusMessage
@@ -146,6 +148,18 @@ fun AdminRecipesScreen(
                     }
 
                     item {
+                        MaintenanceSection(
+                            deletedCount = viewModel.deletedRecipes.size,
+                            orphanScan = viewModel.orphanScan,
+                            isScanning = viewModel.isScanningOrphans,
+                            isBusy = viewModel.isBusy,
+                            onPurgeDeleted = { showPurgeDialog = true },
+                            onScanOrphans = viewModel::scanOrphanImages,
+                            onDeleteOrphans = { showOrphanDialog = true },
+                        )
+                    }
+
+                    item {
                         ClearSection(
                             recipeCount = viewModel.recipes.size,
                             isBusy = viewModel.isBusy,
@@ -166,6 +180,66 @@ fun AdminRecipesScreen(
                 showClearDialog = false
                 selectedDeletedIds = emptySet()
                 viewModel.clear(mode)
+            },
+        )
+    }
+    if (showPurgeDialog) {
+        val count = viewModel.deletedRecipes.size
+        AlertDialog(
+            onDismissRequest = { showPurgeDialog = false },
+            title = {
+                Text("Delete $count deleted ${if (count == 1) "recipe" else "recipes"} permanently?")
+            },
+            text = {
+                Text(
+                    "They are removed from the database with their ingredients, steps, " +
+                        "comments and photos. This cannot be undone — back up first if you " +
+                        "are not sure.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showPurgeDialog = false
+                        selectedDeletedIds = emptySet()
+                        viewModel.purgeDeletedRecipes()
+                    },
+                    enabled = !viewModel.isBusy,
+                ) {
+                    Text("Delete permanently")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPurgeDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showOrphanDialog) {
+        val count = viewModel.orphanScan?.count ?: 0
+        AlertDialog(
+            onDismissRequest = { showOrphanDialog = false },
+            title = { Text("Delete $count orphaned ${if (count == 1) "photo" else "photos"}?") },
+            text = {
+                Text(
+                    "These objects are not referenced by any recipe, including the ones in " +
+                        "the trash. The references are checked again before deleting. This " +
+                        "cannot be undone.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showOrphanDialog = false
+                        viewModel.deleteOrphanImages()
+                    },
+                    enabled = !viewModel.isBusy,
+                ) {
+                    Text("Delete photos")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showOrphanDialog = false }) { Text("Cancel") }
             },
         )
     }

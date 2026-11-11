@@ -28,6 +28,8 @@ data class Ingredient(
 data class Step(
     val number: Int,
     val instruction: String,
+    /** Storage object path of this step's photo, or null when it has none. */
+    val imagePath: String? = null,
 )
 
 data class Comment(
@@ -42,6 +44,8 @@ data class Recipe(
     val title: String,
     val description: String?,
     val youtubeId: String?,
+    /** Storage object path of the cover photo (list thumbnail + detail header). */
+    val imagePath: String? = null,
     val servings: Int?,
     val prepMinutes: Int?,
     val cookMinutes: Int?,

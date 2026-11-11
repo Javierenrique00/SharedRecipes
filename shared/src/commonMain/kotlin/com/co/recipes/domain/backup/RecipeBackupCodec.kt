@@ -50,9 +50,10 @@ object RecipeBackupCodec {
         file.copy(recipes = file.recipes.filter { it.title.isNotBlank() })
     }
 
-    /** `recipes-backup-2026-11-08.json`, the name offered in the save dialog. */
-    fun suggestFileName(date: String): String = "recipes-backup-$date.json"
+    /** `recipes-backup-2026-11-08.json`, or `.zip` when the backup carries photos. */
+    fun suggestFileName(date: String, zipped: Boolean = false): String =
+        if (zipped) "recipes-backup-$date.zip" else "recipes-backup-$date.json"
 
     fun isBackupFileName(name: String): Boolean =
-        name.endsWith(".json", ignoreCase = true)
+        name.endsWith(".json", ignoreCase = true) || name.endsWith(".zip", ignoreCase = true)
 }

@@ -94,6 +94,11 @@ kotlin {
             // tried (KmPDF 1.2.0) is built against an older Skiko and crashes on Compose 1.12
             // with NoSuchMethodError, so it is not a dependency.
             implementation(libs.filekit.dialogs)
+            // Decoding/encoding picked photos to JPEG in common code (see ImageNormalizer).
+            implementation(libs.filekit.dialogs.compose)
+
+            // In-memory ZIP for the backup archive and the Markdown-with-images export.
+            implementation(libs.kmp.zip)
 
             // Remember-me preferences and the legacy plaintext session lookup.
             implementation(libs.multiplatform.settings)
@@ -107,6 +112,7 @@ kotlin {
             implementation(project.dependencies.platform(libs.supabase.bom))
             implementation(libs.supabase.auth)
             implementation(libs.supabase.postgrest)
+            implementation(libs.supabase.storage)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

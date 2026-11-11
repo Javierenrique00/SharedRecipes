@@ -12,9 +12,17 @@ import com.co.recipes.domain.dataclass.formatQuantity
  * description, ingredients, numbered method, footer) because it has to survive being printed
  * on paper and being read on a phone.
  *
+ * [images] maps a storage path to the JPEG bytes already downloaded by the exporter. A
+ * path that is missing from the map is simply skipped, so an unreachable bucket never
+ * blocks the export — the document keeps its text.
+ *
  * Comments are not included: the document is the recipe, not the conversation.
  */
-fun recipeToPdf(recipe: Recipe, exportedAt: String): ByteArray {
+fun recipeToPdf(
+    recipe: Recipe,
+    exportedAt: String,
+    images: Map<String, ByteArray> = emptyMap(),
+): ByteArray {
     val document = PdfDocumentBuilder(title = recipe.title)
     val textWidth = PDF_A4_WIDTH - MARGIN * 2
 
@@ -45,6 +53,8 @@ fun recipeToPdf(recipe: Recipe, exportedAt: String): ByteArray {
     }
 
     document.moveDown(6f)
+
+    photo(document, images[recipe.imagePath], maxHeight = 260f, textWidth = textWidth, caption = null)
 
     recipe.description?.takeIf { it.isNotBlank() }?.let { description ->
         paragraphs(document, description, size = 10.5f, maxWidth = textWidth)
@@ -83,6 +93,15 @@ fun recipeToPdf(recipe: Recipe, exportedAt: String): ByteArray {
                 hangingIndent = 18f,
             )
             document.moveDown(3f)
+
+            // A photo per step is what makes the printed method usable while cooking.
+            photo(
+                document = document,
+                bytes = step.imagePath?.let { images[it] },
+                maxHeight = 200f,
+                textWidth = textWidth,
+                caption = "Step ${step.number}",
+            )
         }
     }
 
@@ -98,6 +117,31 @@ private fun sectionTitle(document: PdfDocumentBuilder, text: String) {
     document.line(listOf(PdfTextRun(text, size = 13f, bold = true)), lineHeight = 16f)
     document.rule()
     document.moveDown(4f)
+}
+
+/**
+ * Draws one JPEG at its natural aspect ratio, with an optional grey caption underneath.
+ * Missing or unreadable bytes are silently skipped: a failed image download must not cost
+ * the reader the rest of the document.
+ */
+private fun photo(
+    document: PdfDocumentBuilder,
+    bytes: ByteArray?,
+    maxHeight: Float,
+    textWidth: Float,
+    caption: String?,
+) {
+    if (bytes == null) return
+    val size = jpegSize(bytes) ?: return
+    if (!document.image(bytes, size.width, size.height, maxWidth = textWidth, maxHeight = maxHeight)) {
+        return
+    }
+
+    document.moveDown(3f)
+    if (caption != null) {
+        document.line(listOf(PdfTextRun(caption, 8.5f, gray = 0.4f)), lineHeight = 11f)
+    }
+    document.moveDown(6f)
 }
 
 /** `•  **200 g**  flat rice noodles`, or just the name when there is no amount. */

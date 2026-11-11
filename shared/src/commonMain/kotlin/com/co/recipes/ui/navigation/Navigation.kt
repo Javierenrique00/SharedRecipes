@@ -15,6 +15,7 @@ import com.co.recipes.domain.viewmodel.RecipeEditorViewModel
 import com.co.recipes.domain.viewmodel.RecipeListViewModel
 import com.co.recipes.infraestructure.api.RecipesApi
 import com.co.recipes.infraestructure.export.RecipeExporterImpl
+import com.co.recipes.infraestructure.storage.RecipeImageStore
 import com.co.recipes.ui.screen.AdminRecipesScreen
 import com.co.recipes.ui.screen.RecipeDetailScreen
 import com.co.recipes.ui.screen.RecipeEditorScreen
@@ -33,13 +34,14 @@ import com.co.recipes.ui.screen.RecipeListScreen
 fun RecipesNavigation(
     navController: NavHostController,
     recipesApi: RecipesApi,
+    imageStore: RecipeImageStore,
     session: UserSession,
     onSignOut: () -> Unit,
     onNavHostReady: suspend (NavHostController) -> Unit = {},
 ) {
     // One exporter for the whole signed-in session: it holds no state, but keeping it
     // hoisted means the detail screen does not build a new one per navigation.
-    val exporter = remember { RecipeExporterImpl() }
+    val exporter = remember { RecipeExporterImpl(imageStore) }
 
     NavHost(navController = navController, startDestination = RecipeList) {
         composable<RecipeList> {
@@ -68,14 +70,14 @@ fun RecipesNavigation(
         // list screen's admin action, and every call behind it is admin-checked in
         // Postgres, so a hand-typed #fragment cannot do anything a client could not.
         composable<AdminRecipes> {
-            val viewModel = viewModel { AdminRecipesViewModel(recipesApi) }
+            val viewModel = viewModel { AdminRecipesViewModel(recipesApi, imageStore) }
             AdminRecipesScreen(navController = navController, viewModel = viewModel)
         }
 
         composable<RecipeEditor> { entry ->
             val route: RecipeEditor = entry.toRoute()
             val viewModel = viewModel(key = "editor-${route.recipeId ?: "new"}") {
-                RecipeEditorViewModel(recipesApi, route.recipeId)
+                RecipeEditorViewModel(recipesApi, imageStore, recipeId = route.recipeId)
             }
             RecipeEditorScreen(
                 navController = navController,

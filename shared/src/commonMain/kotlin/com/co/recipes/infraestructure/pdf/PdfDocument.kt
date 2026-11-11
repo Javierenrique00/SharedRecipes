@@ -16,9 +16,19 @@ package com.co.recipes.infraestructure.pdf
  */
 class PdfDocumentBuilder(private val title: String) {
 
-    private class Page(val content: StringBuilder = StringBuilder())
+    private class Page(
+        val content: StringBuilder = StringBuilder(),
+        /** Indices into [images] drawn on this page; becomes the page's `/XObject` list. */
+        val imageIndexes: MutableList<Int> = mutableListOf(),
+    )
+
+    private class EmbeddedImage(val jpeg: ByteArray, val width: Int, val height: Int)
 
     private val pages = mutableListOf<Page>()
+
+    /** Every JPEG placed in the document, in insertion order (object `/Im1`, `/Im2`, …). */
+    private val images = mutableListOf<EmbeddedImage>()
+
     private var cursorY: Float = PDF_A4_HEIGHT - MARGIN
 
     /** Starts a page. Called lazily by [ensurePage] so an empty document still has one. */
@@ -87,6 +97,49 @@ class PdfDocumentBuilder(private val title: String) {
     }
 
     /**
+     * Places a JPEG below the cursor, scaled to fit [maxWidth] × [maxHeight] and centred in
+     * [maxWidth]. Starts a new page when it would not fit.
+     *
+     * The bytes are embedded verbatim: `/DCTDecode` tells the viewer to run its own JPEG
+     * decoder, so the writer never needs to understand pixels. Returns false when the JPEG
+     * is empty or its dimensions are unreadable.
+     */
+    fun image(jpeg: ByteArray, widthPx: Int, heightPx: Int, maxWidth: Float, maxHeight: Float): Boolean {
+        if (jpeg.isEmpty() || widthPx <= 0 || heightPx <= 0) return false
+
+        ensurePage()
+
+        val aspect = widthPx.toFloat() / heightPx
+        var width = maxWidth
+        var height = width / aspect
+        if (height > maxHeight) {
+            height = maxHeight
+            width = height * aspect
+        }
+
+        if (remainingHeight() < height + 6f) newPage()
+
+        val index = images.size
+        images += EmbeddedImage(jpeg, widthPx, heightPx)
+
+        val page = pages.last()
+        page.imageIndexes += index
+
+        val x = MARGIN + (maxWidth - width) / 2f
+        val y = cursorY - height
+        page.content
+            .append("q ")
+            .append(formatNumber(width)).append(" 0 0 ")
+            .append(formatNumber(height)).append(' ')
+            .append(formatNumber(x)).append(' ')
+            .append(formatNumber(y))
+            .append(" cm /Im").append(index + 1).append(" Do Q\n")
+
+        cursorY -= height
+        return true
+    }
+
+    /**
      * Appends the per-page footer (label on the left, `Page n of m` on the right) and
      * serialises everything into PDF bytes.
      */
@@ -152,7 +205,18 @@ class PdfDocumentBuilder(private val title: String) {
                 .append(formatNumber(PDF_A4_HEIGHT))
                 .append("] /Resources << /Font << /")
                 .append(FONT_REGULAR).append(' ').append(3).append(" 0 R /")
-                .append(FONT_BOLD).append(' ').append(4).append(" 0 R >> >> /Contents ")
+                .append(FONT_BOLD).append(' ').append(4).append(" 0 R >>")
+
+            if (page.imageIndexes.isNotEmpty()) {
+                out.append(" /XObject <<")
+                page.imageIndexes.forEach { imageIndex ->
+                    out.append(" /Im").append(imageIndex + 1).append(' ')
+                        .append(imageObjectNumber(imageIndex)).append(" 0 R")
+                }
+                out.append(" >>")
+            }
+
+            out.append(" >> /Contents ")
                 .append(contentObjectNumber(index)).append(" 0 R >>\nendobj\n")
 
             val content = page.content.toString()
@@ -162,7 +226,20 @@ class PdfDocumentBuilder(private val title: String) {
             out.append("endstream\nendobj\n")
         }
 
-        val infoObjectNumber = pageObjectNumber(pages.size)
+        // JPEG XObjects. The bytes are copied verbatim: /DCTDecode hands the actual pixel
+        // decoding to the PDF viewer, which is what keeps this writer free of an image codec.
+        images.forEachIndexed { index, image ->
+            startObject(imageObjectNumber(index))
+            out.append("<< /Type /XObject /Subtype /Image /Width ").append(image.width)
+                .append(" /Height ").append(image.height)
+                .append(" /ColorSpace /DeviceRGB /BitsPerComponent 8")
+                .append(" /Filter /DCTDecode /Length ").append(image.jpeg.size)
+                .append(" >>\nstream\n")
+            out.append(image.jpeg)
+            out.append("\nendstream\nendobj\n")
+        }
+
+        val infoObjectNumber = imageObjectNumber(images.size)
         startObject(infoObjectNumber)
         out.append("<< /Title (").append(escapePdfString(title))
             .append(") /Producer (Shared Recipes) >>\nendobj\n")
@@ -181,6 +258,9 @@ class PdfDocumentBuilder(private val title: String) {
     private fun pageObjectNumber(index: Int): Int = 5 + index * 2
 
     private fun contentObjectNumber(index: Int): Int = 6 + index * 2
+
+    /** Images come after every page/content pair, then the info dictionary. */
+    private fun imageObjectNumber(index: Int): Int = 5 + pages.size * 2 + index
 }
 
 /** One styled piece of a text line. */
@@ -221,6 +301,12 @@ private class PdfByteSink {
     }
 
     fun append(value: Int): PdfByteSink = append(value.toString())
+
+    /** Raw bytes for embedded streams (JPEG data must not be re-encoded as characters). */
+    fun append(data: ByteArray): PdfByteSink {
+        data.forEach { bytes += it }
+        return this
+    }
 
     fun append(character: Char): PdfByteSink = append(character.toString())
 

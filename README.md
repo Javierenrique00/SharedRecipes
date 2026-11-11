@@ -11,10 +11,12 @@ A shared recipe collection with two roles:
 | Comment | ✅ | ✅ (own comments only) |
 | Moderate comments | ✅ | ❌ |
 | Export a recipe to PDF / Markdown | ✅ | ✅ |
+| Add a cover photo and one photo per method step | ✅ | ❌ |
 | Backup / restore / clear recipes | ✅ | ❌ |
 
-Recipes hold an optional YouTube video, an ordered ingredient ("components") list
-and an ordered procedure ("method").
+Recipes hold an optional YouTube video, an optional cover photo, an ordered ingredient
+("components") list and an ordered procedure ("method") whose steps can each carry their
+own photo.
 
 Authorization is enforced **in Postgres** (Row Level Security), not in the app. The
 KMP client ships only the publishable key, so a modified client cannot exceed these
@@ -31,7 +33,8 @@ users, which RLS would never let the admin re-create). Reads filter
 ## Repository layout
 
 ```
-supabase/migrations/          SQL migrations (schema, RLS, atomic write RPCs, admin backup)
+supabase/migrations/          SQL migrations (schema, RLS, atomic write RPCs, admin backup,
+                              recipe images + the public recipe-images bucket)
 supabase/seed.sql             Sample recipe (Pad Thai)
 branding/                     Icon source artwork + the transparent master it generates
 scripts/                      generate-app-icons.sh — every platform icon, from that artwork
@@ -51,11 +54,14 @@ Five packages carry the export/administration features, kept out of the UI on pu
 
 | Package (`shared/src/commonMain/...`) | What lives there |
 |---|---|
-| `domain/backup` | `RecipeBackupCodec` — reads/writes the admin backup file (pure Kotlin) |
-| `domain/export` | Markdown renderer, file-name slugs, the `RecipeExporter` contract, export timestamps |
-| `infraestructure/files` | `DocumentFileStore` on top of FileKit: open/save dialogs, `expect`ed save on the web |
-| `infraestructure/pdf` | The hand-written PDF writer (text layout, pages, xref) — see *Exporting a recipe* |
-| `infraestructure/export` | `RecipeExporterImpl`: wires a recipe to Markdown bytes or PDF bytes and saves it |
+| `domain/backup` | `RecipeBackupCodec` (the JSON manifest) and `RecipeBackupArchive` (the `.zip` that carries the photos) |
+| `domain/export` | Markdown renderer, image file names, file-name slugs, the `RecipeExporter` contract, export timestamps |
+| `infraestructure/files` | `DocumentFileStore` on top of FileKit: open/save dialogs, photo picker, `expect`ed save on the web |
+| `infraestructure/images` | `normalizeToJpeg`: platform decode (EXIF-aware on Android) + resize + JPEG encode, in common code |
+| `infraestructure/storage` | `RecipeImageStore`: upload/download/delete in the `recipe-images` bucket, public URL helper |
+| `infraestructure/zip` | `encodeZip`/`isZip`, the in-memory ZIP shared by the backup and the Markdown export |
+| `infraestructure/pdf` | The hand-written PDF writer (text + JPEG XObjects, pages, xref) — see *Exporting a recipe* |
+| `infraestructure/export` | `RecipeExporterImpl`: wires a recipe to Markdown/zip bytes or PDF bytes and saves it |
 
 
 ## Toolchain (verified working together)
@@ -63,10 +69,11 @@ Five packages carry the export/administration features, kept out of the UI on pu
 | Component | Version | Note |
 |---|---|---|
 | Kotlin | 2.4.21 | minimum required by supabase-kt 3.9.0 (it is compiled with 2.4.21) |
-| supabase-kt | 3.9.0 (`auth-kt`, `postgrest-kt`) | |
+| supabase-kt | 3.9.0 (`auth-kt`, `postgrest-kt`, `storage-kt`) | |
 | Compose Multiplatform | 1.12.2 | |
 | Ktor | 3.6.1 | |
-| FileKit | 0.17.0 (`filekit-dialogs`) | Open/save dialogs for the backup and the exports: Android SAF, iOS Files picker, AWT on the desktop, a download in the browser |
+| FileKit | 0.17.0 (`filekit-dialogs`, `filekit-dialogs-compose`) | Open/save dialogs for the backup and the exports, the photo picker, and `ImageBitmap`→JPEG encoding |
+| kmp-zip | 2.1.0 | In-memory ZIP streams in common code: the backup archive and the Markdown-with-photos export |
 | AGP | 9.5.1 | CMP 1.12 depends on `lifecycle 2.11`, which requires AGP ≥ 9.1 |
 | Gradle | 9.8.2 | |
 | Android | minSdk 26, compileSdk 37 | supabase-kt requires minSdk 26 |
@@ -524,15 +531,16 @@ editor does: it now owns a text field, so the keyboard must not cover the result
 
 ## Recipe administration (admin)
 
-The **Admin** action in the recipe list's top bar opens a console with four cards. It is
+The **Admin** action in the recipe list's top bar opens a console with five cards. It is
 only rendered for admins, and every call behind it is admin-checked in Postgres
 (`public.is_admin()`), so hiding the button is convenience, not security.
 
 | Action | What happens |
 |---|---|
-| **Backup** | `admin_export_recipes()` returns the whole collection as one `jsonb` array (soft-deleted recipes, ingredients, steps and comments included) and the app writes it to `recipes-backup-<date>.json` through the save dialog. |
-| **Restore** | Pick a backup file → every recipe in it is listed with a checkbox and a `new` / `update` badge → only the ticked ones are imported (`admin_import_recipes`). |
+| **Backup** | `admin_export_recipes()` returns the whole collection as one `jsonb` array (soft-deleted recipes, ingredients, steps and comments included) and the app writes it through the save dialog: `recipes-backup-<date>.json`, or `recipes-backup-<date>.zip` when the collection has photos (JSON + `images/`). |
+| **Restore** | Pick a `.zip` or `.json` backup → every recipe in it is listed with a checkbox and a `new` / `update` badge → only the ticked ones are imported (`admin_import_recipes`) and their photos are re-uploaded to the paths recorded in the file. |
 | **Deleted recipes** | Soft-deleted recipes are listed with checkboxes; `admin_restore_recipes` clears `deleted_at` on the selected ones (or all of them). |
+| **Maintenance** | Two independent chores, each with its own confirmation — see *Maintenance* below. |
 | **Clear** | `admin_clear_recipes`: *soft* by default (recoverable, shows up in the deleted list), or permanent after typing `DELETE`. |
 
 Why restoring is not "insert the rows again": `admin_import_recipes` upserts **on the
@@ -548,7 +556,7 @@ of the tables that a DBA can read, diff and hand-edit.
 
 ```json
 {
-  "formatVersion": 1,
+  "formatVersion": 2,
   "app": "Shared Recipes",
   "exportedAt": "2026-11-08T09:41:12Z",
   "recipes": [
@@ -557,20 +565,114 @@ of the tables that a DBA can read, diff and hand-edit.
       "title": "Pad Thai",
       "description": "Rice noodles with tamarind.",
       "youtube_url": "https://www.youtube.com/watch?v=BWk1C0dMj8o",
+      "image_path": "recipes/4b1e….jpg",
       "servings": 2, "prep_minutes": 20, "cook_minutes": 10,
       "created_at": "2026-11-01T10:00:00Z",
       "deleted_at": null,
       "ingredients": [{ "position": 0, "quantity": 200, "unit": "g", "name": "flat rice noodles" }],
-      "steps": [{ "step_number": 1, "instruction": "Soak the noodles." }],
+      "steps": [{ "step_number": 1, "instruction": "Soak the noodles.", "image_path": "steps/9c0a….jpg" }],
       "comments": [{ "id": "9a1…", "author_id": "b02…", "body": "Extra lime.", "created_at": "…" }]
     }
   ]
 }
 ```
 
+When any recipe has a photo the same document is wrapped in a zip instead of being written
+on its own:
+
+```
+recipes-backup-2026-11-11.zip
+├── recipes-backup.json          # exactly the JSON above
+└── images/recipes/4b1e….jpg     # object paths, so a restore re-uploads to the same names
+    images/steps/9c0a….jpg
+```
+
+The manifest is still plain text inside the zip, so the backup stays hand-editable. A
+collection without photos keeps producing a plain `.json`. `kmp-zip` writes and reads both
+formats entirely in memory, on every target.
+
 `formatVersion` is checked on read: a file from a newer build is refused with an
 explanation instead of being half-restored. Unknown keys are ignored, so adding fields
-later does not break older builds.
+later does not break older builds; `formatVersion: 1` files (no images) still import.
+
+## Maintenance (empty the trash, sweep the bucket)
+
+Soft delete is what makes Undo and restore possible, so the collection accumulates two
+kinds of leftovers that a plain "clear everything" cannot handle:
+
+* recipes sitting in the trash that the admin is done with;
+* storage objects no recipe points at any more (a replaced photo, an abandoned create, a
+  hard clear that did not finish, a recipe restored from an image-less JSON backup).
+
+The admin console's **Maintenance** card handles both, as two separate actions with their
+own confirmation dialogs:
+
+| Action | Backend | What it does |
+|---|---|---|
+| **Delete N deleted recipes** | `admin_purge_deleted_recipes()` | `delete from public.recipes where deleted_at is not null`, which cascades to ingredients, steps and comments. The client snapshots the deleted recipes' `image_path`s first and removes those objects afterwards. Visible recipes are never touched — that is the difference from **Clear → delete permanently**. |
+| **Orphaned photos** | `admin_recipe_image_paths()` | Scan first, then delete. The scan compares every object in `recipes/` and `steps/` with the `image_path`s the database still references (soft-deleted recipes **included**, since they can be restored) and reports count + size. Nothing is deleted until the admin confirms. |
+
+Details that keep the sweep safe:
+
+- **References are re-checked immediately before deleting.** A recipe created between the
+  scan and the confirmation spares its photo instead of losing it.
+- **Photos younger than one hour are never swept.** Uploads are written before the row that
+  references them, so a fresh object can legitimately be unreferenced for a few seconds
+  (and a second admin device may be mid-save). A genuinely orphaned photo simply appears on
+  the next scan.
+- **Only `recipes/` and `steps/` are listed and deleted.** Anything else someone drops into
+  the bucket is left alone, and objects whose creation time Storage does not report are
+  treated as old (the reference check is the real protection).
+- **Deletes are batched** (100 paths per request), so a large sweep does not exceed a
+  single request limit; a partial failure leaves the rest for the next run.
+- Both RPCs are `SECURITY INVOKER` and admin-only, like every other function behind this
+  screen: the policies (`recipes delete admin`, `recipe images delete admin`) are still the
+  authority.
+
+`admin_recipe_image_paths()` is a read-only helper and is the only new function a client
+could call directly; it returns paths, no data, and deletion is still refused by RLS.
+
+## Recipe photos
+
+Two optional photos per recipe, both stored in Supabase Storage in the `recipe-images`
+bucket created by migration 10:
+
+- **Cover** — `public.recipes.image_path`; the list thumbnail (falling back to the YouTube
+  still when the recipe has none) and the header of the recipe screen.
+- **Step photos** — `public.recipe_steps.image_path`; one per method step, rendered under
+  its instruction.
+
+The flow when an admin adds one:
+
+1. The editor opens the native photo picker (Android Photo Picker, iOS `PHPicker` — asked
+   for the *compatible* representation so HEIC is transcoded before it reaches the app).
+2. `normalizeToJpeg` decodes it, applies the EXIF rotation on Android (where
+   `BitmapFactory` ignores it), downscales to 1600 px and re-encodes as JPEG at quality 85.
+   The decode is the platform's; the encode is `ImageBitmap.encodeToByteArray` in common
+   code, so preview, upload and PDF all use the same bytes.
+3. Saving **uploads first** — `recipes/<hex>.jpg` / `steps/<hex>.jpg` — and only then calls
+   `create_recipe` / `update_recipe` with the paths. A row can therefore never reference a
+   missing object; a failed upload leaves the recipe untouched and the pick in place for a
+   retry. Replaced or removed objects are deleted best-effort *after* the write succeeds.
+4. Names are unique per upload, which is what makes Coil's cache correct after a replace.
+
+The bucket is public for **read** (thumbnails load through a plain URL, exactly like the
+YouTube stills) and admin-only for **write**, via `storage.objects` policies that call
+`public.is_admin()`. Objects are capped at 5 MB and restricted to `image/jpeg`.
+**Listing** is a query on `storage.objects` and is not covered by the public bucket
+shortcut, so it has its own admin-only SELECT policy (migration 12) — that is what the
+maintenance sweep uses; clients cannot enumerate the bucket.
+
+Consequences worth remembering:
+
+- Soft-deleted recipes keep their photos, because Undo and restore must bring them back.
+  The permanent **Clear** removes the objects too (best effort, from the list already on
+  screen), and the admin **Maintenance** card sweeps anything else that no recipe points at
+  (see *Maintenance*).
+- `update_recipe` replaces steps wholesale, so the editor sends each step's `image_path`
+  back; otherwise every edit would drop the photos.
+- A recipe's photos travel with the backup (see *Recipe administration*) and are embedded
+  in the exports (see below).
 
 ## Exporting a recipe (PDF or Markdown)
 
@@ -584,11 +686,22 @@ a meta list, `## Ingredients` as bullets, `## Method` as a numbered list, and a 
 opens correctly in Obsidian, Notion, GitHub and VS Code, and markdown-special characters in
 a title are escaped so a recipe called `*Best* noodles` cannot corrupt the document.
 
+When the recipe has photos, the Markdown export is saved as a `.zip` instead of a bare
+`.md`: `pad-thai.zip` contains `pad-thai.md` and `images/cover.jpg`,
+`images/step-1.jpg`, … and the document links to them relatively. That is what keeps the
+pictures visible offline, without base64 blobs that many Markdown renderers refuse to show.
+
 **PDF** (`infraestructure/pdf`) is written by hand — about 300 lines producing a PDF 1.4
 document with A4 pages, Helvetica base-14 fonts, word wrapping, hanging indents for numbered
 steps, automatic page breaks and a per-page footer (`Shared Recipes · <date>` / `Page n
 of m`). Text is therefore **selectable and searchable**, files are a few KB, and every
 platform emits identical output.
+
+Photos are embedded as JPEG XObjects (`/Filter /DCTDecode`): the bytes are copied verbatim
+and the viewer runs its own decoder, so the writer needs no image codec at all. The cover
+sits under the meta line and each step photo under its instruction, scaled to the text
+column with a page break when it does not fit. A photo that cannot be downloaded is simply
+skipped — the document still gets written.
 
 Two deliberate choices there:
 

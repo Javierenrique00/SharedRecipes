@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -20,6 +21,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextAlign
@@ -28,6 +30,54 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.co.recipes.domain.dataclass.Comment
 import com.co.recipes.domain.dataclass.Recipe
+import com.co.recipes.domain.dataclass.Step
+import com.co.recipes.infraestructure.storage.RecipeImages
+
+/**
+ * The cover photo at the top of the recipe. Like the video header, it is a card so it reads
+ * as media rather than as part of the text.
+ */
+@Composable
+internal fun RecipeCoverImage(recipe: Recipe) {
+    val url = RecipeImages.publicUrl(recipe.imagePath) ?: return
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        AsyncImage(
+            model = url,
+            contentDescription = "Photo of ${recipe.title}",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f),
+        )
+    }
+}
+
+/** One method step: its number and text, plus the photo the admin attached to it. */
+@Composable
+internal fun StepRow(step: Step) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                text = "${step.number}.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(step.instruction, style = MaterialTheme.typography.bodyMedium)
+        }
+
+        RecipeImages.publicUrl(step.imagePath)?.let { url ->
+            Spacer(Modifier.height(8.dp))
+            AsyncImage(
+                model = url,
+                contentDescription = "Photo for step ${step.number}",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(8.dp)),
+            )
+        }
+    }
+}
 
 @Composable
 internal fun VideoHeader(recipe: Recipe) {

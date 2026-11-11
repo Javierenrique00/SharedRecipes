@@ -102,6 +102,20 @@ fun RecipeEditorScreen(
             }
 
             item {
+                Text("Cover photo", style = MaterialTheme.typography.titleMedium)
+            }
+
+            item {
+                CoverImageEditor(
+                    pick = viewModel.coverImagePick,
+                    path = viewModel.coverImagePath,
+                    isBusy = viewModel.isPickingImage,
+                    onPick = viewModel::pickCoverImage,
+                    onRemove = viewModel::removeCoverImage,
+                )
+            }
+
+            item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     EditorNumberField(
                         label = "Servings",
@@ -145,11 +159,23 @@ fun RecipeEditorScreen(
                     row = row,
                     onChange = { viewModel.updateStepRow(row.key, it) },
                     onRemove = { viewModel.removeStepRow(row.key) },
+                    onPickImage = { viewModel.pickStepImage(row.key) },
+                    onRemoveImage = { viewModel.removeStepImage(row.key) },
                 )
             }
 
             item {
                 TextButton(onClick = viewModel::addStepRow) { Text("+ Add step") }
+            }
+
+            viewModel.uploadStatus?.let { status ->
+                item {
+                    Text(
+                        text = status,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             item {

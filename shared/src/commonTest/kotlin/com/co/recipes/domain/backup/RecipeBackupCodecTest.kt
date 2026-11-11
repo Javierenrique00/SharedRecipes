@@ -1,5 +1,6 @@
 package com.co.recipes.domain.backup
 
+import com.co.recipes.infraestructure.dataclass.RECIPE_BACKUP_FORMAT_VERSION
 import com.co.recipes.infraestructure.dataclass.RecipeBackupCommentDto
 import com.co.recipes.infraestructure.dataclass.RecipeBackupDto
 import com.co.recipes.infraestructure.dataclass.RecipeBackupIngredientDto
@@ -21,6 +22,7 @@ class RecipeBackupCodecTest {
         title = "Pad Thai",
         description = "Rice noodles with tamarind.",
         youtubeUrl = "https://www.youtube.com/watch?v=BWk1C0dMj8o",
+        imagePath = "recipes/cover-test.jpg",
         servings = 2,
         prepMinutes = 20,
         cookMinutes = 10,
@@ -31,7 +33,11 @@ class RecipeBackupCodecTest {
         ),
         steps = listOf(
             RecipeBackupStepDto(stepNumber = 1, instruction = "Soak the noodles."),
-            RecipeBackupStepDto(stepNumber = 2, instruction = "Stir-fry everything."),
+            RecipeBackupStepDto(
+                stepNumber = 2,
+                instruction = "Stir-fry everything.",
+                imagePath = "steps/step-two.jpg",
+            ),
         ),
         comments = listOf(
             RecipeBackupCommentDto(
@@ -48,9 +54,14 @@ class RecipeBackupCodecTest {
         val encoded = RecipeBackupCodec.encode(listOf(padThai), exportedAt = "2026-11-08T09:41:12Z")
         val decoded = RecipeBackupCodec.decode(encoded).getOrThrow()
 
-        assertEquals(1, decoded.formatVersion)
+        assertEquals(RECIPE_BACKUP_FORMAT_VERSION, decoded.formatVersion)
         assertEquals("2026-11-08T09:41:12Z", decoded.exportedAt)
         assertEquals(listOf(padThai), decoded.recipes)
+        assertEquals(
+            listOf("recipes/cover-test.jpg", "steps/step-two.jpg"),
+            decoded.recipes.single().imagePaths(),
+            "every photo the recipe references must be restorable from the file",
+        )
     }
 
     @Test
@@ -60,9 +71,10 @@ class RecipeBackupCodecTest {
         // Pretty printed (it is meant to be opened in an editor) and with the table's own
         // field names, which is what lets admin_import_recipes read it without mapping.
         assertTrue(encoded.contains("\n"), "the file should be pretty printed")
-        assertTrue(encoded.contains("\"formatVersion\": 1"), encoded)
+        assertTrue(encoded.contains("\"formatVersion\": $RECIPE_BACKUP_FORMAT_VERSION"), encoded)
         assertTrue(encoded.contains("\"title\": \"Pad Thai\""), encoded)
         assertTrue(encoded.contains("\"youtube_url\""), encoded)
+        assertTrue(encoded.contains("\"image_path\": \"recipes/cover-test.jpg\""), encoded)
         assertTrue(encoded.contains("\"prep_minutes\": 20"), encoded)
         assertTrue(encoded.contains("\"step_number\": 2"), encoded)
     }
@@ -102,7 +114,10 @@ class RecipeBackupCodecTest {
     @Test
     fun aFutureFormatVersionIsRejectedWithAReadableMessage() {
         val encoded = RecipeBackupCodec.encode(listOf(padThai), exportedAt = "2026-11-08T00:00:00Z")
-        val fromTheFuture = encoded.replace("\"formatVersion\": 1", "\"formatVersion\": 99")
+        val fromTheFuture = encoded.replace(
+            "\"formatVersion\": $RECIPE_BACKUP_FORMAT_VERSION",
+            "\"formatVersion\": 99",
+        )
 
         val message = RecipeBackupCodec.decode(fromTheFuture).exceptionOrNull()?.message
 
@@ -131,6 +146,11 @@ class RecipeBackupCodecTest {
     @Test
     fun suggestedFileNameCarriesTheDate() {
         assertEquals("recipes-backup-2026-11-08.json", RecipeBackupCodec.suggestFileName("2026-11-08"))
+        assertEquals(
+            "recipes-backup-2026-11-08.zip",
+            RecipeBackupCodec.suggestFileName("2026-11-08", zipped = true),
+        )
         assertTrue(RecipeBackupCodec.isBackupFileName("RECIPES-BACKUP.JSON"))
+        assertTrue(RecipeBackupCodec.isBackupFileName("recipes-backup.zip"))
     }
 }

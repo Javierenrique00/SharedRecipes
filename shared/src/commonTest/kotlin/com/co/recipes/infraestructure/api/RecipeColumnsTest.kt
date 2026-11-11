@@ -47,6 +47,20 @@ class RecipeColumnsTest {
     }
 
     @Test
+    fun theImageColumnsAreSelectedWhereTheyAreRendered() {
+        // The card thumbnail and the detail header read recipes.image_path; the step photos
+        // read recipe_steps.image_path. A projection that forgets either renders nothing.
+        assertTrue(
+            RecipesApiImpl.SUMMARY_COLUMNS.contains("image_path"),
+            "the list thumbnail needs image_path: ${RecipesApiImpl.SUMMARY_COLUMNS}",
+        )
+        assertTrue(
+            RecipesApiImpl.DETAIL_COLUMNS.contains("recipe_steps(id,step_number,instruction,image_path)"),
+            "step photos need image_path: ${RecipesApiImpl.DETAIL_COLUMNS}",
+        )
+    }
+
+    @Test
     fun bothProjectionsSelectTheColumnsTheMapperReads() {
         // Mappers.kt sorts ingredients by position, steps by step_number and comments by
         // created_at, and RecipeDto requires every column below not to be null.

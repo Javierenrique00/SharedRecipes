@@ -25,6 +25,7 @@ data class StepDto(
     val id: String? = null,
     @SerialName("step_number") val stepNumber: Int,
     val instruction: String,
+    @SerialName("image_path") val imagePath: String? = null,
 )
 
 @Serializable
@@ -47,6 +48,7 @@ data class RecipeDto(
     val description: String? = null,
     @SerialName("youtube_url") val youtubeUrl: String? = null,
     @SerialName("youtube_id") val youtubeId: String? = null,
+    @SerialName("image_path") val imagePath: String? = null,
     val servings: Int? = null,
     @SerialName("prep_minutes") val prepMinutes: Int? = null,
     @SerialName("cook_minutes") val cookMinutes: Int? = null,
@@ -80,6 +82,7 @@ data class IngredientParam(
 data class StepParam(
     @SerialName("step_number") val stepNumber: Int,
     val instruction: String,
+    @SerialName("image_path") val imagePath: String? = null,
 )
 
 @Serializable
@@ -92,4 +95,5 @@ data class CreateRecipeParams(
     @SerialName("p_cook_minutes") val cookMinutes: Int? = null,
     @SerialName("p_ingredients") val ingredients: List<IngredientParam> = emptyList(),
     @SerialName("p_steps") val steps: List<StepParam> = emptyList(),
+    @SerialName("p_image_path") val imagePath: String? = null,
 )

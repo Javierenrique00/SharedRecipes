@@ -132,4 +132,70 @@ class RecipePdfTest {
         assertEquals("pad-thai.md", recipeFileName("Pad Thai", "md"))
         assertEquals("pad-thai.pdf", recipeFileName("Pad Thai", "pdf"))
     }
+
+    @Test
+    fun photosAreEmbeddedAsJpegStreams() {
+        val photo = jpegWith(width = 400, height = 300)
+        val withPhotos = recipe(steps = 1).copy(
+            imagePath = "recipes/cover.jpg",
+            steps = listOf(Step(number = 1, instruction = "Stir.", imagePath = "steps/one.jpg")),
+        )
+
+        val bytes = recipeToPdf(
+            recipe = withPhotos,
+            exportedAt = "2026-11-08 09:41",
+            images = mapOf(
+                "recipes/cover.jpg" to photo,
+                "steps/one.jpg" to photo,
+            ),
+        )
+        val pdf = bytes.decodeToString()
+
+        assertTrue(pdf.contains("/Subtype /Image"), "the cover and the step photo must be images")
+        assertTrue(pdf.contains("/Filter /DCTDecode"), "JPEGs are embedded without re-encoding")
+        assertTrue(pdf.contains("/XObject <<"), "a page that draws a photo must declare it")
+        assertTrue(pdf.contains("/Im1 Do"), "the content stream must draw the first image")
+
+        // The bytes go in verbatim (DCTDecode), not re-encoded as text.
+        assertTrue(bytes.containsSequence(photo), "the JPEG payload must be copied unchanged")
+    }
+
+    @Test
+    fun aRecipeWithoutPhotosGetsNoImageObjects() {
+        val pdf = recipeToPdf(recipe(), exportedAt = "2026-11-08 09:41").decodeToString()
+
+        assertTrue(!pdf.contains("/Subtype /Image"), pdf.take(400))
+        assertTrue(!pdf.contains("/XObject"), pdf.take(400))
+    }
+
+    @Test
+    fun aMissingPhotoIsSkippedWithoutBreakingTheDocument() {
+        val withMissingPhoto = recipe(steps = 1).copy(
+            imagePath = "recipes/gone.jpg",
+            steps = listOf(Step(number = 1, instruction = "Stir.", imagePath = "steps/gone.jpg")),
+        )
+
+        val pdf = recipeToPdf(withMissingPhoto, exportedAt = "2026-11-08 09:41", images = emptyMap())
+
+        assertTrue(pdf.decodeToString().trimEnd().endsWith("%%EOF"))
+        assertTrue(pdf.decodeToString().contains("Stir."))
+    }
+
+    private fun jpegWith(width: Int, height: Int): ByteArray = bytes(
+        0xFF, 0xD8,
+        0xFF, 0xC0, 0x00, 0x11, 0x08,
+        height shr 8, height and 0xFF,
+        width shr 8, width and 0xFF,
+        0x03, 0x01, 0x11, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01,
+        0xFF, 0xD9,
+    )
+
+    private fun bytes(vararg values: Int): ByteArray = ByteArray(values.size) { values[it].toByte() }
+
+    private fun ByteArray.containsSequence(needle: ByteArray): Boolean {
+        if (needle.isEmpty() || needle.size > size) return false
+        return (0..size - needle.size).any { start ->
+            needle.indices.all { offset -> this[start + offset] == needle[offset] }
+        }
+    }
 }

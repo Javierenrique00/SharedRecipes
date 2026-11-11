@@ -21,9 +21,12 @@ enum class ExportFormat(
     MARKDOWN(
         extension = "md",
         label = "Markdown (.md)",
-        description = "Plain text for notes apps; renders the same on every platform.",
+        description = "Plain text for notes apps; recipes with photos include an images folder.",
     ),
 }
+
+/** Extension used instead of `.md` when the Markdown export carries its photos. */
+const val ZIP_EXTENSION = "zip"
 
 sealed interface ExportResult {
     /** [detail] carries extra context, e.g. the folder a desktop PDF was written to. */

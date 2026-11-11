@@ -112,6 +112,7 @@ fun RecipeDetailScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                item { RecipeCoverImage(recipe) }
                 item { VideoHeader(recipe) }
                 item { MetaRow(recipe) }
 
@@ -125,15 +126,8 @@ fun RecipeDetailScreen(
                 }
 
                 item { SectionTitle("Method") }
-                items(recipe.steps) { step ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(
-                            text = "${step.number}.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Text(step.instruction, style = MaterialTheme.typography.bodyMedium)
-                    }
+                items(recipe.steps, key = { it.number }) { step ->
+                    StepRow(step)
                 }
 
                 item {

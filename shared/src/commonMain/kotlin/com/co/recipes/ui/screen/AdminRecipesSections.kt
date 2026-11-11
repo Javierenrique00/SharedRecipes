@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.co.recipes.domain.maintenance.OrphanReport
 import com.co.recipes.domain.viewmodel.AdminRecipesViewModel
 import com.co.recipes.infraestructure.dataclass.RecipeBackupDto
 
@@ -52,9 +53,10 @@ internal fun BackupSection(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Backup", style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "Writes a JSON file with all $recipeCount recipes, their ingredients, " +
-                    "steps and comments — deleted ones included. It is the file “Restore” reads " +
-                    "back, so keep it somewhere safe.",
+                text = "Writes all $recipeCount recipes, their ingredients, steps and comments " +
+                    "— deleted ones included — to a file. Recipes with photos are saved as a " +
+                    ".zip (the JSON plus an images folder); without photos it stays a plain " +
+                    ".json. It is the file “Restore” reads back, so keep it somewhere safe.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -71,9 +73,9 @@ internal fun RestoreSection(isBusy: Boolean, onPick: () -> Unit) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Restore", style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "Pick a backup file, choose which recipes to bring back, then confirm. " +
-                    "Recipes that still exist keep their comments; deleted ones reappear with " +
-                    "their original id.",
+                text = "Pick a backup file (.json or .zip), choose which recipes to bring back, " +
+                    "then confirm. Recipes that still exist keep their comments; deleted ones " +
+                    "reappear with their original id, photos included.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -277,5 +279,114 @@ internal fun RecipeBackupRow(
                 color = MaterialTheme.colorScheme.primary,
             )
         }
+    }
+}
+
+/**
+ * Housekeeping between the two extremes of "restore everything" and "delete everything".
+ *
+ * Two independent actions, each confirmed on its own:
+ *
+ *  * purge the recipes already sitting in the trash (rows + their photos);
+ *  * sweep photos in the bucket that no recipe points at any more.
+ *
+ * The orphan side is scan-then-delete on purpose: the admin sees how many objects and how
+ * much space before anything is removed.
+ */
+@Composable
+internal fun MaintenanceSection(
+    deletedCount: Int,
+    orphanScan: OrphanReport?,
+    isScanning: Boolean,
+    isBusy: Boolean,
+    onPurgeDeleted: () -> Unit,
+    onScanOrphans: () -> Unit,
+    onDeleteOrphans: () -> Unit,
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Maintenance", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = "Keeps the database and the photo bucket in sync. Both actions are " +
+                    "permanent, so each one asks for confirmation.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            HorizontalDivider()
+
+            Text(
+                text = if (deletedCount == 0) {
+                    "The trash is empty."
+                } else {
+                    "$deletedCount deleted ${if (deletedCount == 1) "recipe" else "recipes"} " +
+                        "can be removed for good."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            OutlinedButton(
+                onClick = onPurgeDeleted,
+                enabled = !isBusy && deletedCount > 0,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    if (deletedCount > 0) {
+                        "Delete $deletedCount deleted ${if (deletedCount == 1) "recipe" else "recipes"}"
+                    } else {
+                        "Delete deleted recipes"
+                    },
+                )
+            }
+
+            HorizontalDivider()
+
+            Text("Orphaned photos", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = when {
+                    orphanScan == null ->
+                        "Photos in the bucket that no recipe uses. Scan to see if there are any."
+                    orphanScan.isEmpty ->
+                        "None — every photo in the bucket belongs to a recipe."
+                    else ->
+                        "${orphanScan.count} not used by any recipe · ${formatBytes(orphanScan.totalBytes)}"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = onScanOrphans,
+                    enabled = !isBusy && !isScanning,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(if (isScanning) "Scanning…" else "Scan storage")
+                }
+                if (orphanScan != null && !orphanScan.isEmpty) {
+                    Button(
+                        onClick = onDeleteOrphans,
+                        enabled = !isBusy,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("Delete ${orphanScan.count} photos")
+                    }
+                }
+            }
+            Text(
+                text = "Photos uploaded in the last hour are never swept: an upload is " +
+                    "written before the recipe that uses it.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** `430 KB`, `1.4 MB` — enough precision to judge whether a sweep is worth running. */
+private fun formatBytes(bytes: Long): String {
+    val kb = bytes / 1024
+    return when {
+        kb < 1 -> "$bytes B"
+        kb < 1024 -> "$kb KB"
+        else -> "${kb / 1024}.${(kb % 1024) * 10 / 1024} MB"
     }
 }

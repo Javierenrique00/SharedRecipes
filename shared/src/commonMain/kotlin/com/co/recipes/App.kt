@@ -24,6 +24,7 @@ import com.co.recipes.infraestructure.api.AuthApiImpl
 import com.co.recipes.infraestructure.api.RecipesApiImpl
 import com.co.recipes.infraestructure.createSupabaseClientOrNull
 import com.co.recipes.infraestructure.preferences.UserPreferences
+import com.co.recipes.infraestructure.storage.SupabaseRecipeImageStore
 import com.co.recipes.ui.navigation.RecipesNavigation
 import com.co.recipes.ui.screen.LoginScreen
 import com.co.recipes.ui.theme.SharedRecipesTheme
@@ -49,6 +50,7 @@ fun App(
         } else {
             val authApi = remember { AuthApiImpl(supabase) }
             val recipesApi = remember { RecipesApiImpl(supabase) }
+            val imageStore = remember { SupabaseRecipeImageStore(supabase) }
             val authViewModel = viewModel { AuthViewModel(authApi, preferences) }
 
             val session = authViewModel.session
@@ -61,6 +63,7 @@ fun App(
                     RecipesNavigation(
                         navController = navController,
                         recipesApi = recipesApi,
+                        imageStore = imageStore,
                         session = session,
                         onSignOut = authViewModel::signOut,
                         onNavHostReady = onNavHostReady,

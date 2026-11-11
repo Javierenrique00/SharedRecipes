@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Card
@@ -40,15 +42,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.navigation.NavHostController
+import coil3.compose.AsyncImage
 import com.co.recipes.domain.dataclass.Recipe
 import com.co.recipes.domain.dataclass.UserSession
 import com.co.recipes.domain.viewmodel.RecipeListViewModel
+import com.co.recipes.infraestructure.storage.RecipeImages
 import com.co.recipes.ui.common.EmptyState
 import com.co.recipes.ui.common.ErrorState
 import com.co.recipes.ui.common.screenContentPadding
@@ -276,47 +282,73 @@ private fun RecipeCard(
     onDelete: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }) {
-        Column(Modifier.padding(16.dp)) {
-            Text(recipe.title, style = MaterialTheme.typography.titleMedium)
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            RecipeThumbnail(recipe)
 
-            recipe.description?.takeIf { it.isNotBlank() }?.let { description ->
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            Column(Modifier.weight(1f)) {
+                Text(recipe.title, style = MaterialTheme.typography.titleMedium)
 
-            Spacer(Modifier.height(10.dp))
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                recipe.totalMinutes?.let {
-                    Text("$it min", style = MaterialTheme.typography.labelSmall)
+                recipe.description?.takeIf { it.isNotBlank() }?.let { description ->
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
-                Text(
-                    "${recipe.ingredients.size} ingredients",
-                    style = MaterialTheme.typography.labelSmall,
-                )
-                Text(
-                    "${recipe.comments.size} comments",
-                    style = MaterialTheme.typography.labelSmall,
-                )
-                if (recipe.youtubeId != null) {
-                    Text("video", style = MaterialTheme.typography.labelSmall)
-                }
-            }
 
-            if (isAdmin) {
-                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                    TextButton(onClick = onDelete) { Text("Delete") }
+                Spacer(Modifier.height(10.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    recipe.totalMinutes?.let {
+                        Text("$it min", style = MaterialTheme.typography.labelSmall)
+                    }
+                    Text(
+                        "${recipe.ingredients.size} ingredients",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    Text(
+                        "${recipe.comments.size} comments",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    if (recipe.youtubeId != null) {
+                        Text("video", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+
+                if (isAdmin) {
+                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                        TextButton(onClick = onDelete) { Text("Delete") }
+                    }
                 }
             }
         }
     }
+}
+
+/**
+ * The card's picture: the recipe's own photo, or its YouTube still when it has no upload
+ * yet. Recipes with neither keep the text-only card they had before.
+ */
+@Composable
+private fun RecipeThumbnail(recipe: Recipe) {
+    val url = RecipeImages.publicUrl(recipe.imagePath) ?: recipe.youtubeThumbnailUrl ?: return
+
+    AsyncImage(
+        model = url,
+        contentDescription = "Photo of ${recipe.title}",
+        contentScale = ContentScale.Crop,
+        modifier = Modifier
+            .size(96.dp)
+            .clip(RoundedCornerShape(8.dp)),
+    )
 }

@@ -9,6 +9,7 @@ import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.SessionManager
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
+import io.github.jan.supabase.storage.Storage
 
 /**
  * Builds the single Supabase client used by the app.
@@ -34,6 +35,9 @@ fun createSupabaseClientOrNull(): SupabaseClient? {
             autoSaveToStorage = true
         }
         install(Postgrest)
+        // Recipe photos live in the public `recipe-images` bucket; writes are admin-only
+        // through the storage policies in migration 10.
+        install(Storage)
     }
 }
 

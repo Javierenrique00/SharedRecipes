@@ -11,6 +11,10 @@ composeMultiplatform = "1.12.2"
 # browser download). `filekit-dialogs` bundles filekit-core and pulls in no Compose
 # dependencies, which is what lets the view models drive the dialogs directly.
 filekit = "0.17.0"
+# ZIP reader/writer in commonMain (JVM/Android, iOS and wasmJs). Used for the admin
+# backup archive and for a Markdown export that carries its images. Published for
+# exactly this project's targets and compiled with Kotlin 2.4.21.
+kmp-zip = "2.1.0"
 kotlin = "2.4.21"        # minimum for supabase-kt 3.9.0 (compiled with 2.4.21)
 # Browser target (wasmJs): window/document/localStorage. Compose ui already pulls it in
 # transitively; declared explicitly so the web store can import it directly.
@@ -54,6 +58,11 @@ ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx
 supabase-bom = { module = "io.github.jan-tennert.supabase:bom", version.ref = "supabase" }
 supabase-auth = { module = "io.github.jan-tennert.supabase:auth-kt" }
 supabase-postgrest = { module = "io.github.jan-tennert.supabase:postgrest-kt" }
+# Storage: the recipe-images bucket (cover photos and per-step photos).
+supabase-storage = { module = "io.github.jan-tennert.supabase:storage-kt" }
+
+# In-memory ZIP streams shared by the backup file and the Markdown-with-images export.
+kmp-zip = { module = "no.synth:kmp-zip", version.ref = "kmp-zip" }
 
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 coil-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version.ref = "coil" }
@@ -61,6 +70,9 @@ coil-ktor = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coi
 
 # File dialogs (open/save) shared by the recipe backup and the PDF/Markdown export.
 filekit-dialogs = { module = "io.github.vinceglb:filekit-dialogs", version.ref = "filekit" }
+# ImageBitmap <-> JPEG/PNG in common code (uses Bitmap on Android, Skia elsewhere), which
+# is what lets every picked photo be normalized to JPEG before it is uploaded.
+filekit-dialogs-compose = { module = "io.github.vinceglb:filekit-dialogs-compose", version.ref = "filekit" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

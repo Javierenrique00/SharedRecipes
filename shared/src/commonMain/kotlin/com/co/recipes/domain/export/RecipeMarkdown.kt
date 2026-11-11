@@ -12,8 +12,16 @@ import com.co.recipes.domain.dataclass.formatQuantity
  * The output is plain CommonMark (headings, a bullet list, an ordered list) so it opens
  * correctly in Obsidian, Notion, GitHub, VS Code and any email client that renders it.
  * Comments are left out on purpose: the exported document is the recipe, not the thread.
+ *
+ * [imageFileNames] maps a storage path to the relative file name the image will have
+ * inside the exported `.zip` (`images/cover.jpg`, `images/step-2.jpg`, …). A recipe with
+ * photos therefore stays one self-contained document that works offline; a recipe without
+ * them produces exactly the same Markdown as before.
  */
-fun Recipe.toMarkdown(exportedAt: String): String = buildString {
+fun Recipe.toMarkdown(
+    exportedAt: String,
+    imageFileNames: Map<String, String> = emptyMap(),
+): String = buildString {
     appendLine("# ${escapeMarkdownLine(title)}")
     appendLine()
 
@@ -34,6 +42,11 @@ fun Recipe.toMarkdown(exportedAt: String): String = buildString {
         appendLine()
     }
 
+    imagePath?.let { imageFileNames[it] }?.let { fileName ->
+        appendLine("![${escapeMarkdownInline(title)}]($fileName)")
+        appendLine()
+    }
+
     if (ingredients.isNotEmpty()) {
         appendLine("## Ingredients")
         appendLine()
@@ -48,6 +61,10 @@ fun Recipe.toMarkdown(exportedAt: String): String = buildString {
         appendLine()
         steps.forEach { step ->
             appendLine(step.toMarkdownItem())
+            step.imagePath?.let { imageFileNames[it] }?.let { fileName ->
+                appendLine()
+                appendLine("![Step ${step.number}]($fileName)")
+            }
         }
         appendLine()
     }

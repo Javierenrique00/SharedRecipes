@@ -11,6 +11,7 @@ fun RecipeDto.toDomain(): Recipe = Recipe(
     title = title,
     description = description,
     youtubeId = youtubeId,
+    imagePath = imagePath,
     servings = servings,
     prepMinutes = prepMinutes,
     cookMinutes = cookMinutes,
@@ -29,6 +30,7 @@ fun IngredientDto.toDomain(): Ingredient = Ingredient(
 fun StepDto.toDomain(): Step = Step(
     number = stepNumber,
     instruction = instruction,
+    imagePath = imagePath,
 )
 
 fun CommentDto.toDomain(): Comment = Comment(
