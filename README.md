@@ -135,6 +135,44 @@ A few structural consequences worth knowing before you change the build:
    The role is cached in the client when the session resolves: restart the app, or
    sign out and back in, to pick up a role change made while it is running.
 
+### Bootstrap a fresh project from this checkout
+
+`supabase/config.toml`, `supabase/migrations/` and `supabase/seed.sql` are everything the CLI
+needs to recreate the database on a new project — no Docker, because this pushes to the hosted
+database instead of starting the local stack:
+
+```bash
+brew install supabase/tap/supabase      # or: npm i -D supabase → npx supabase
+supabase login                          # or: export SUPABASE_ACCESS_TOKEN=sb_...
+supabase projects create shared-recipes --org-id <org-id> --region us-east-1 \
+  --db-password '<database-password>'
+supabase link <project-ref>
+supabase db push --remote --dry-run     # lists the pending migrations, changes nothing
+supabase db push --remote --include-seed --yes
+```
+
+Three flags are not optional:
+
+- `--remote` — without it `db push` targets the local stack (needs Docker), not the linked
+  project; `--linked` is the deprecated spelling.
+- `--yes` — the "apply these changes?" confirmation defaults to **No**, and a non-interactive
+  run has to confirm explicitly (`--yes`, or `SUPABASE_YES` exported in the shell).
+- `--include-seed` — otherwise the Pad Thai sample in `seed.sql` is skipped.
+
+Then point the app at the new project (see *Configure*, steps 1–2). Two values are asserted in
+code, so update both: the URL/key in `SupabaseConfig.kt` and the project ref in
+`SupabaseConfigTest.kt`. Finally add the web origins to **Authentication → URL Configuration**.
+
+Migration 7 seeds the allowlist with the project owner's address, so that account is promoted to
+`admin` the moment it signs up; a different owner means changing `admin_emails` afterwards
+(*Configure*, step 4).
+
+Do **not** run `db push` against a project that already has these tables: a project populated
+through the Dashboard or the MCP tool records different migration-history timestamps, so every
+local file would look pending and the push would try to re-create existing objects. Check with
+`supabase migration list --remote` first, and reconcile with `supabase migration repair`.
+
+
 ## Run
 
 ```bash

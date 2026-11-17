@@ -39,7 +39,7 @@ object SupabaseConfig {
      * Replace this whole string. No trailing slash and no `/rest/v1` suffix —
      * supabase-kt appends the API paths itself.
      */
-    const val URL: String = "https://dbwzrjgctmfckdsljznf.supabase.co"
+    const val URL: String = "https://beonnviixurlcsohotje.supabase.co"
 
     /**
      * Publishable/anon key, e.g. "sb_publishable_...".
@@ -47,10 +47,10 @@ object SupabaseConfig {
      * Replace this whole string. Paste the key on its own — a legacy anon key starts
      * with `eyJ` and must not keep any `sb_publishable_` prefix.
      */
-    const val PUBLISHABLE_KEY: String = "sb_publishable_koUrzzaiGN7h0l-zaBkHuA_sbLT4FqC"
+    const val PUBLISHABLE_KEY: String = "sb_publishable_G6AAUdOFVtoh7H-jnFjL3Q_y4j5jP5s"
 
     /**
-     * The `<project-ref>` of [URL] ("dbwzrjgctmfckdsljznf" here).
+     * The `<project-ref>` of [URL] ("beonnviixurlcsohotje" here).
      *
      * Used only to namespace on-device storage keys, so pointing a build at another
      * project never reuses this project's stored session.

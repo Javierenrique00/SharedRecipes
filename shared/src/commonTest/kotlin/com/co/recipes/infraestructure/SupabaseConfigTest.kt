@@ -45,11 +45,11 @@ class SupabaseConfigTest {
     @Test
     fun projectRefNamespacesOnDeviceStorage() {
         assertEquals(
-            "dbwzrjgctmfckdsljznf",
+            "beonnviixurlcsohotje",
             SupabaseConfig.projectRef,
             "projectRef must be the subdomain of the project URL",
         )
-        assertEquals("sb-dbwzrjgctmfckdsljznf-session", SupabaseConfig.sessionStorageKey)
+        assertEquals("sb-beonnviixurlcsohotje-session", SupabaseConfig.sessionStorageKey)
         assertTrue(SupabaseConfig.sessionMigrationKey.endsWith("-session-migrated"))
     }
 
