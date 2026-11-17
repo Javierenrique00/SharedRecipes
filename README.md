@@ -102,9 +102,9 @@ A few structural consequences worth knowing before you change the build:
 
    > **Which project?** The shipped values point at **`dbwzrjgctmfckdsljznf`**
    > ("Javierenrique00's Project"), the original project that holds the real recipes,
-   > profiles and images. `beonnviixurlcsohotje` ("shared-recipes") is a **backup copy**
-   > and is not used by the app. The CLI is linked to the original project as well, so
-   > `supabase db push` / `supabase config push` target it.
+   > profiles and images. The old `beonnviixurlcsohotje` ("shared-recipes") backup project
+   > has been **deleted**, and the CLI is linked to the original, so `supabase db push` /
+   > `supabase config push` target it.
 
    > Use **only** the publishable/anon key. The `service_role` key bypasses RLS and must
    > never ship inside a client.
