@@ -31,6 +31,23 @@ interface AuthApi {
 
     suspend fun signOut(): Result<Unit>
 
+    /**
+     * Sends the "Reset password" email. Supabase answers the same whether or not the address
+     * belongs to an account, so the UI can show a neutral message instead of leaking which
+     * emails are registered.
+     */
+    suspend fun requestPasswordReset(email: String): Result<Unit>
+
+    /**
+     * Completes a recovery link the user pasted into the app (desktop only; Android, iOS and
+     * the browser deliver the link to the app themselves). Exchanges the PKCE `code`, or
+     * imports the session from an implicit-flow fragment.
+     */
+    suspend fun completeRecoveryLink(link: String): Result<Unit>
+
+    /** Replaces the password of the recovery session imported by the link. */
+    suspend fun updatePassword(newPassword: String): Result<Unit>
+
     /** Loads the signed-in user's profile, which carries the role used by the UI. */
     suspend fun currentProfile(): Result<ProfileDto>
 }

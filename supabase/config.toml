@@ -162,7 +162,16 @@ site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# The mobile deep link and the desktop loopback address are the password-recovery redirects
+# (see AuthLinks.kt); the web origins are needed for the browser target, whose default
+# redirect is its own URL. Production origins must be added in the dashboard as well.
+additional_redirect_urls = [
+  "https://127.0.0.1:3000",
+  "http://localhost:8080",
+  "https://javierenrique00.github.io/SharedRecipes",
+  "http://127.0.0.1:8090/",
+  "sharedrecipes://auth",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.

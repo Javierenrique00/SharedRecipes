@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.setMain
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -26,6 +27,15 @@ private class FakeAuthApi(initialStatus: AuthStatus = AuthStatus.SignedOut) : Au
 
     var signOutCalls = 0
         private set
+
+    /** Addresses passed to [requestPasswordReset], in order. */
+    val resetRequests = mutableListOf<String>()
+
+    /** Passwords passed to [updatePassword], in order. */
+    val updatedPasswords = mutableListOf<String>()
+
+    /** Links passed to [completeRecoveryLink], in order. */
+    val recoveryLinks = mutableListOf<String>()
 
     override val status: Flow<AuthStatus> = statusFlow
 
@@ -47,6 +57,25 @@ private class FakeAuthApi(initialStatus: AuthStatus = AuthStatus.SignedOut) : Au
         signOutCalls++
         signedIn = false
         statusFlow.value = AuthStatus.SignedOut
+        return Result.success(Unit)
+    }
+
+    override suspend fun requestPasswordReset(email: String): Result<Unit> {
+        resetRequests += email
+        return Result.success(Unit)
+    }
+
+    override suspend fun completeRecoveryLink(link: String): Result<Unit> {
+        recoveryLinks += link
+        // What the real implementation does after exchanging the code: a session exists and
+        // AuthStatus reports SignedIn.
+        signedIn = true
+        statusFlow.value = AuthStatus.SignedIn
+        return Result.success(Unit)
+    }
+
+    override suspend fun updatePassword(newPassword: String): Result<Unit> {
+        updatedPasswords += newPassword
         return Result.success(Unit)
     }
 
@@ -168,6 +197,159 @@ class AuthViewModelTest {
             assertEquals(1, api.signOutCalls)
             assertNull(viewModel.session)
             assertEquals("", viewModel.password)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun requestingAResetRemembersTheAddressAndKeepsTheLoginForm() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val preferences = UserPreferences(MapSettings())
+            val api = FakeAuthApi()
+            val viewModel = AuthViewModel(api, preferences)
+            advanceUntilIdle() // let the initial "signed out" status land first
+
+            viewModel.email = "cook@example.com"
+            viewModel.showForgotPassword()
+            viewModel.submit()
+            advanceUntilIdle()
+
+            assertEquals(listOf("cook@example.com"), api.resetRequests)
+            assertEquals(AuthMode.ForgotPassword, viewModel.mode)
+            assertTrue(viewModel.isResetPending)
+            assertEquals("cook@example.com", preferences.pendingPasswordReset()?.email)
+            assertNotNull(viewModel.infoMessage)
+            assertNull(viewModel.errorMessage)
+            assertFalse(viewModel.isResettingPassword, "no session yet, so nothing to reset")
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun aRecoveryLinkOpensTheNewPasswordForm() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val preferences = UserPreferences(MapSettings())
+            val api = FakeAuthApi()
+            val viewModel = AuthViewModel(api, preferences)
+            advanceUntilIdle()
+
+            viewModel.email = "cook@example.com"
+            viewModel.showForgotPassword()
+            viewModel.submit()
+            advanceUntilIdle()
+
+            viewModel.recoveryLink = "sharedrecipes://auth?code=abc"
+            viewModel.submitRecoveryLink()
+            advanceUntilIdle()
+
+            assertEquals(listOf("sharedrecipes://auth?code=abc"), api.recoveryLinks)
+            assertEquals("", viewModel.recoveryLink, "the pasted link is not kept around")
+            assertNotNull(viewModel.session, "the link signs the user in")
+            assertTrue(viewModel.isResettingPassword)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun savingTheNewPasswordClearsTheMarkerAndLeavesTheResetForm() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val preferences = UserPreferences(MapSettings())
+            val api = FakeAuthApi()
+            val viewModel = AuthViewModel(api, preferences)
+            advanceUntilIdle()
+
+            viewModel.email = "cook@example.com"
+            viewModel.showForgotPassword()
+            viewModel.submit()
+            advanceUntilIdle()
+            viewModel.recoveryLink = "sharedrecipes://auth?code=abc"
+            viewModel.submitRecoveryLink()
+            advanceUntilIdle()
+
+            viewModel.newPassword = "new-secret"
+            viewModel.confirmPassword = "new-secret"
+            viewModel.completePasswordReset()
+            advanceUntilIdle()
+
+            assertEquals(listOf("new-secret"), api.updatedPasswords)
+            assertFalse(viewModel.isResetPending)
+            assertFalse(viewModel.isResettingPassword)
+            assertNull(preferences.pendingPasswordReset())
+            assertEquals("", viewModel.newPassword)
+            assertEquals("", viewModel.confirmPassword)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun tooShortOrMismatchedPasswordsCannotBeSaved() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val viewModel = AuthViewModel(FakeAuthApi(), UserPreferences(MapSettings()))
+
+            viewModel.newPassword = "12345"
+            viewModel.confirmPassword = "12345"
+            assertFalse(viewModel.canSavePassword, "below the 6 character minimum")
+
+            viewModel.newPassword = "123456"
+            viewModel.confirmPassword = "123457"
+            assertTrue(viewModel.passwordsMismatch)
+            assertFalse(viewModel.canSavePassword, "the confirmation does not match")
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun signingInAbandonsAPendingReset() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val preferences = UserPreferences(MapSettings())
+            preferences.rememberPendingPasswordReset("cook@example.com")
+            val viewModel = AuthViewModel(FakeAuthApi(), preferences)
+            advanceUntilIdle()
+
+            assertTrue(viewModel.isResetPending, "restored from preferences on start")
+
+            viewModel.email = "cook@example.com"
+            viewModel.password = "sup3r-secret"
+            viewModel.submit()
+            advanceUntilIdle()
+
+            assertFalse(viewModel.isResetPending)
+            assertFalse(viewModel.isResettingPassword)
+            assertNull(preferences.pendingPasswordReset())
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun cancellingTheResetSignsOutAndClearsTheMarker() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val preferences = UserPreferences(MapSettings())
+            preferences.rememberPendingPasswordReset("cook@example.com")
+            val api = FakeAuthApi(AuthStatus.SignedIn)
+            val viewModel = AuthViewModel(api, preferences)
+            advanceUntilIdle()
+
+            assertTrue(viewModel.isResettingPassword)
+
+            viewModel.cancelPasswordReset()
+            advanceUntilIdle()
+
+            assertEquals(1, api.signOutCalls)
+            assertFalse(viewModel.isResettingPassword)
+            assertNull(viewModel.session)
+            assertNull(preferences.pendingPasswordReset())
         } finally {
             Dispatchers.resetMain()
         }

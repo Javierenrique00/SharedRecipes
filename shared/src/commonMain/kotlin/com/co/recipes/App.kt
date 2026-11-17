@@ -27,34 +27,51 @@ import com.co.recipes.infraestructure.preferences.UserPreferences
 import com.co.recipes.infraestructure.storage.SupabaseRecipeImageStore
 import com.co.recipes.ui.navigation.RecipesNavigation
 import com.co.recipes.ui.screen.LoginScreen
+import com.co.recipes.ui.screen.ResetPasswordScreen
 import com.co.recipes.ui.theme.SharedRecipesTheme
+import io.github.jan.supabase.SupabaseClient
 
 @Composable
 fun App(
+    /**
+     * Client prepared by the platform entry point when it has to inspect the launching
+     * intent first: Android and iOS forward recovery links to
+     * `SupabaseClient.handleDeeplinks`. Every other target leaves this null and the client
+     * is created here.
+     *
+     * The client owns the auth session, so it must survive recomposition.
+     */
+    supabase: SupabaseClient? = null,
     /**
      * Web-only hook, invoked once the signed-in navigation graph is attached, so the browser
      * target can bind it to window history. Android, iOS and desktop use the no-op default.
      */
     onNavHostReady: suspend (NavHostController) -> Unit = {},
 ) {
-    // The Supabase client owns the auth session, so it must survive recomposition.
-    val supabase = remember { createSupabaseClientOrNull() }
+    // `remember` is called unconditionally: the composition's call order must not depend on
+    // whether a client was passed in.
+    val createdHere = remember { if (supabase == null) createSupabaseClientOrNull() else null }
+    val client = supabase ?: createdHere
     // Non-secret "remember my email" preferences; the session itself is encrypted
     // and owned by Supabase's session manager.
     val preferences = remember { UserPreferences() }
 
     // Light or dark comes from the OS on every target (see SharedRecipesTheme).
     SharedRecipesTheme {
-        if (supabase == null) {
+        if (client == null) {
             ConfigurationMissingScreen(SupabaseConfig.configurationError)
         } else {
-            val authApi = remember { AuthApiImpl(supabase) }
-            val recipesApi = remember { RecipesApiImpl(supabase) }
-            val imageStore = remember { SupabaseRecipeImageStore(supabase) }
+            val authApi = remember { AuthApiImpl(client) }
+            val recipesApi = remember { RecipesApiImpl(client) }
+            val imageStore = remember { SupabaseRecipeImageStore(client) }
             val authViewModel = viewModel { AuthViewModel(authApi, preferences) }
 
             val session = authViewModel.session
             when {
+                // A recovery link signs the user in before the new password has been chosen,
+                // so this has to win over the recipe list below.
+                authViewModel.isResettingPassword -> ResetPasswordScreen(authViewModel)
+
                 session != null -> {
                     // Created inside the signed-in branch on purpose: signing out disposes the
                     // controller, so the next session starts from RecipeList with a clean stack

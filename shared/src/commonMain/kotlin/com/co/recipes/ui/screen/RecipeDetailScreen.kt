@@ -1,5 +1,6 @@
 package com.co.recipes.ui.screen
 
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -66,7 +67,24 @@ fun RecipeDetailScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text(recipe?.title ?: "Recipe") },
+                title = {
+                    Text(
+                        text = recipe?.title ?: "Recipe",
+                        // The bar is a single 64dp row, so the name has to stay on one line.
+                        // A name that does not fit scrolls through the slot instead of wrapping
+                        // into a taller bar (which pushed the LazyColumn down); there is no
+                        // ellipsis here because the marquee measures the text unbounded and
+                        // draws the whole line, clipped to the slot.
+                        maxLines = 1,
+                        modifier = Modifier.basicMarquee(
+                            // Pause, scroll the whole name, pause again, for as long as the
+                            // screen is open. A short name never moves: the modifier does
+                            // nothing while the text fits.
+                            iterations = Int.MAX_VALUE,
+                            repeatDelayMillis = 2_000,
+                        ),
+                    )
+                },
                 navigationIcon = {
                     TextButton(onClick = { navController.popBackStack() }) { Text("Back") }
                 },

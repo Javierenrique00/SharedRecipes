@@ -26,10 +26,31 @@
             android:name="com.co.recipes.MainActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode">
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+              Password-recovery links. Supabase redirects the email link to
+              sharedrecipes://auth?code=… (scheme/host configured in SupabaseClientProvider),
+              and MainActivity forwards the intent to SupabaseClient.handleDeeplinks.
+
+              The scheme must also be listed in iosApp/iosApp/Info.plist and under
+              Authentication → URL Configuration → Redirect URLs in the dashboard, and
+              launchMode="singleTask" above is what makes an already-running app receive the
+              link through onNewIntent (instead of starting a second instance with a second
+              Supabase client).
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="sharedrecipes"
+                    android:host="auth" />
             </intent-filter>
         </activity>
 

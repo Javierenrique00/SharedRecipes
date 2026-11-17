@@ -1,5 +1,6 @@
 package com.co.recipes
 
+import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -17,6 +18,19 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // The Compose UI itself lives in :shared so Android needs no Compose setup.
         startSharedRecipes()
+    }
+
+    /**
+     * A recovery link (`sharedrecipes://auth?code=…`) that arrives while the app is open.
+     *
+     * The manifest declares `launchMode="singleTask"`, so the system reuses this activity
+     * instead of starting a second one — that is what makes this callback (and therefore a
+     * single Supabase client) possible.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleAuthIntent(intent)
     }
 
     /**

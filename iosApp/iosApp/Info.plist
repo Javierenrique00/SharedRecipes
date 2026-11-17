@@ -4,5 +4,25 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<!--
+	  Password-recovery links. Supabase redirects the email link to
+	  sharedrecipes://auth?code=…; iOSApp.swift handles it with .onOpenURL and forwards it to
+	  the shared SupabaseClient.handleDeeplinks.
+
+	  The scheme must match AUTH_LINK_SCHEME in
+	  shared/src/commonMain/.../infraestructure/auth/AuthLinks.kt, the Android intent-filter,
+	  and Authentication → URL Configuration → Redirect URLs in the Supabase dashboard.
+	-->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.co.recipes.auth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>sharedrecipes</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

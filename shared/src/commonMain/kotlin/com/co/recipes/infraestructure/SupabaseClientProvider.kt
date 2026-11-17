@@ -1,11 +1,14 @@
 package com.co.recipes.infraestructure
 
+import com.co.recipes.infraestructure.auth.AUTH_LINK_HOST
+import com.co.recipes.infraestructure.auth.AUTH_LINK_SCHEME
 import com.co.recipes.infraestructure.security.SecureSessionManager
 import com.co.recipes.infraestructure.security.createSecureStore
 import com.co.recipes.infraestructure.security.migrateLegacySession
 import com.russhwolf.settings.Settings
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.Auth
+import io.github.jan.supabase.auth.FlowType
 import io.github.jan.supabase.auth.SessionManager
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
@@ -33,6 +36,16 @@ fun createSupabaseClientOrNull(): SupabaseClient? {
             alwaysAutoRefresh = true
             autoLoadFromStorage = true
             autoSaveToStorage = true
+
+            // Password-recovery links. PKCE keeps the access/refresh tokens out of the URL:
+            // the email link comes back as `sharedrecipes://auth?code=…` (desktop/browser:
+            // the redirect URL), and `handleDeeplinks` exchanges the code using the verifier
+            // saved by `resetPasswordForEmail`. It also means a link only works on the
+            // device/browser that requested it, which is what makes the "pending reset"
+            // marker in UserPreferences reliable.
+            flowType = FlowType.PKCE
+            scheme = AUTH_LINK_SCHEME
+            host = AUTH_LINK_HOST
         }
         install(Postgrest)
         // Recipe photos live in the public `recipe-images` bucket; writes are admin-only

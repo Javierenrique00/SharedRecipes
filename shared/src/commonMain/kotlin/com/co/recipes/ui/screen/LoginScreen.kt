@@ -82,10 +82,14 @@ fun LoginScreen(authViewModel: AuthViewModel) {
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = if (authViewModel.isRegisterMode) {
-                        "Create an account to read and comment on recipes."
-                    } else {
-                        "Sign in to browse the recipe collection."
+                    text = when {
+                        authViewModel.isForgotPasswordMode ->
+                            "Enter your email and we'll send you a link to choose a new password."
+
+                        authViewModel.isRegisterMode ->
+                            "Create an account to read and comment on recipes."
+
+                        else -> "Sign in to browse the recipe collection."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -113,61 +117,114 @@ fun LoginScreen(authViewModel: AuthViewModel) {
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                Spacer(Modifier.height(12.dp))
+                if (authViewModel.isForgotPasswordMode) {
+                    Spacer(Modifier.height(12.dp))
 
-                OutlinedTextField(
-                    value = authViewModel.password,
-                    onValueChange = { authViewModel.password = it },
-                    label = { Text("Password") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Spacer(Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(
-                        checked = authViewModel.rememberMe,
-                        onCheckedChange = { authViewModel.rememberMe = it },
+                    SubmitButton(
+                        text = "Send reset link",
+                        enabled = authViewModel.canSubmit,
+                        loading = authViewModel.isLoading,
+                        onClick = { authViewModel.submit() },
                     )
-                    Text(
-                        text = "Remember my email",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                } else {
+                    Spacer(Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = authViewModel.password,
+                        onValueChange = { authViewModel.password = it },
+                        label = { Text("Password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                }
 
-                Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(12.dp))
 
-                Button(
-                    onClick = { authViewModel.submit() },
-                    enabled = authViewModel.canSubmit,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    if (authViewModel.isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = authViewModel.rememberMe,
+                            onCheckedChange = { authViewModel.rememberMe = it },
                         )
-                    } else {
-                        Text(if (authViewModel.isRegisterMode) "Create account" else "Sign in")
+                        Text(
+                            text = "Remember my email",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    SubmitButton(
+                        text = if (authViewModel.isRegisterMode) "Create account" else "Sign in",
+                        enabled = authViewModel.canSubmit,
+                        loading = authViewModel.isLoading,
+                        onClick = { authViewModel.submit() },
+                    )
                 }
 
                 Spacer(Modifier.height(4.dp))
 
-                TextButton(onClick = { authViewModel.toggleMode() }) {
-                    Text(
-                        if (authViewModel.isRegisterMode) {
-                            "I already have an account"
-                        } else {
-                            "Create an account"
+                if (authViewModel.isForgotPasswordMode) {
+                    if (authViewModel.needsRecoveryLinkPaste) {
+                        Spacer(Modifier.height(8.dp))
+                        // Desktop only: no URL scheme reopens the app, so the link is copied
+                        // out of the browser and handed over here.
+                        Text(
+                            text = "Open the link from the email in your browser, then paste " +
+                                "the full address here.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = authViewModel.recoveryLink,
+                            onValueChange = { authViewModel.recoveryLink = it },
+                            label = { Text("Recovery link") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                            maxLines = 3,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        SubmitButton(
+                            text = "Continue with link",
+                            enabled = authViewModel.canSubmitRecoveryLink,
+                            loading = authViewModel.isLoading,
+                            onClick = { authViewModel.submitRecoveryLink() },
+                        )
+                        Spacer(Modifier.height(4.dp))
+                    }
+
+                    TextButton(onClick = { authViewModel.showSignIn() }) {
+                        Text("Back to sign in")
+                    }
+                } else {
+                    if (!authViewModel.isRegisterMode) {
+                        TextButton(onClick = { authViewModel.showForgotPassword() }) {
+                            Text("Forgot password?")
                         }
+                    }
+
+                    TextButton(onClick = { authViewModel.toggleMode() }) {
+                        Text(
+                            if (authViewModel.isRegisterMode) {
+                                "I already have an account"
+                            } else {
+                                "Create an account"
+                            }
+                        )
+                    }
+                }
+
+                authViewModel.infoMessage?.let { message ->
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
 
@@ -183,3 +240,32 @@ fun LoginScreen(authViewModel: AuthViewModel) {
         }
     }
 }
+
+/**
+ * Primary action of a form. Extracted because the login screen has up to three of them
+ * (sign in / create account, send reset link, continue with link) and they all have to
+ * show the same in-button spinner instead of a label while a request is running.
+ */
+@Composable
+private fun SubmitButton(
+    text: String,
+    enabled: Boolean,
+    loading: Boolean,
+    onClick: () -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Text(text)
+        }
+    }
+}
+

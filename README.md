@@ -100,6 +100,12 @@ A few structural consequences worth knowing before you change the build:
    `shared/src/commonMain/kotlin/com/co/recipes/infraestructure/SupabaseConfig.kt`.
    Until you do, the app shows a "Supabase is not configured" screen instead of crashing.
 
+   > **Which project?** The shipped values point at **`dbwzrjgctmfckdsljznf`**
+   > ("Javierenrique00's Project"), the original project that holds the real recipes,
+   > profiles and images. `beonnviixurlcsohotje` ("shared-recipes") is a **backup copy**
+   > and is not used by the app. The CLI is linked to the original project as well, so
+   > `supabase db push` / `supabase config push` target it.
+
    > Use **only** the publishable/anon key. The `service_role` key bypasses RLS and must
    > never ship inside a client.
 
@@ -526,6 +532,61 @@ build keeps the session in plaintext `localStorage` — the same trade-off as De
 with a real XSS surface because any script on the app's origin can read it. Nothing else is
 persisted (still no password), `localStorage` is per-origin, and every access is guarded so
 private-mode or quota failures fall back to "sign in again" instead of crashing.
+
+## Recovering a password
+
+The sign-in form has a **Forgot password?** link (it is hidden in the sign-up form). It asks
+for the email address, calls `resetPasswordForEmail`, and then waits for the link. The link
+comes back as a **PKCE redirect** — `…?code=…`, never an access token — and the app shows
+**Choose a new password** instead of the recipe list until that password is saved.
+
+`AuthViewModel.isResettingPassword` is what gates `App`. This is not cosmetic: opening the
+link calls `handleDeeplinks` → `exchangeCodeForSession`, which imports a **real session**, so
+without the gate the app would drop the user straight into the recipes with the old password
+still in place. The state behind the gate is a non-secret marker in `UserPreferences`
+(`auth.recovery_email` + `auth.recovery_requested_at`, one-hour TTL matching the recovery
+email), which is also what makes a *cold start* triggered by the link open the reset screen.
+
+| Target | How the link reaches the app |
+|---|---|
+| Android | `sharedrecipes://auth` intent-filter in `AndroidManifest.xml`. `MainActivity` is `singleTask`, so a link that re-opens a running app arrives in `onNewIntent`; both entry points forward the intent to `SupabaseClient.handleDeeplinks` (`AndroidEntry.kt`). |
+| iOS | `CFBundleURLTypes` in `Info.plist`. `iOSApp.swift`'s `.onOpenURL` calls `handleAuthDeepLink`, which forwards to `SupabaseClient.handleDeeplinks` (`MainViewController.kt`). |
+| Web | Nothing to wire: while the Auth plugin initialises, supabase-kt checks the page URL, exchanges the `?code=`, imports the session and clears the parameter with `history.replaceState`. PKCE also keeps the code out of the `#fragment` the router uses. |
+| Desktop | There is no URL-scheme registration on the JVM. The email redirects to `http://127.0.0.1:8090/`; the user copies that address out of the browser and pastes it into the form, which calls `completeRecoveryLink`. |
+
+The redirects must also be listed under **Authentication → URL Configuration → Redirect
+URLs** in the dashboard (`supabase/config.toml` already carries the local ones):
+
+- `sharedrecipes://auth` — Android and iOS
+- `http://localhost:8080` — web development
+- `https://javierenrique00.github.io/SharedRecipes` — the deployed web build
+- `http://127.0.0.1:8090/` — desktop
+
+That exact list is already applied to the production project (`dbwzrjgctmfckdsljznf`).
+It was pushed with a **minimal** config file that declared only
+`auth.additional_redirect_urls`:
+
+```bash
+supabase config push --workdir <dir-with-a-minimal-supabase/config.toml> \
+  --remote=dbwzrjgctmfckdsljznf --yes
+```
+
+Do **not** push the repository's full `config.toml` to a hosted project: it also declares
+local-only values (MFA off, vector storage on, pooler sizes, `site_url`, OTP length), and
+`config push` writes every declared property. `supabase config diff` previews the change.
+
+Delivery needs **custom SMTP**: the built-in server only sends to the organisation's team
+addresses, so a reset for a normal user silently goes nowhere until SMTP is configured.
+
+Two consequences of the PKCE flow worth knowing:
+
+- A recovery link only works on the device/browser that requested it, because the code
+  verifier is stored there. Switching the project to the implicit flow would lift that, but
+  the tokens would then travel in the URL fragment — which on the web doubles as the
+  router's state.
+- The new password is held in memory only while it is typed. The marker above is an email
+  address and a timestamp, nothing else, so `UserPreferencesTest.neverWritesACredential`
+  still holds.
 
 ## Searching the list
 
